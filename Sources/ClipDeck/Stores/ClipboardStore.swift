@@ -3,6 +3,30 @@ import Combine
 import Foundation
 import UniformTypeIdentifiers
 
+private final class ClipboardUndoAction: NSObject {
+    enum Operation {
+        case restore
+        case delete
+    }
+
+    let operation: Operation
+    let item: ClipboardItem
+    let index: Int
+    weak var undoManager: UndoManager?
+
+    init(
+        operation: Operation,
+        item: ClipboardItem,
+        index: Int,
+        undoManager: UndoManager
+    ) {
+        self.operation = operation
+        self.item = item
+        self.index = index
+        self.undoManager = undoManager
+    }
+}
+
 /// In-memory clipboard history for the current app session only.
 @MainActor
 final class ClipboardStore: NSObject, ObservableObject {
@@ -229,22 +253,12 @@ final class ClipboardStore: NSObject, ObservableObject {
         at index: Int,
         undoManager: UndoManager
     ) {
-        let createsGroup = undoManager.groupingLevel == 0
-        if createsGroup {
-            undoManager.beginUndoGrouping()
-        }
-        undoManager.registerUndo(withTarget: self) { store in
-            store.restore(item, at: index)
-            store.registerDeleteRedo(
-                for: item,
-                at: index,
-                undoManager: undoManager
-            )
-        }
-        undoManager.setActionName("删除剪贴板历史")
-        if createsGroup {
-            undoManager.endUndoGrouping()
-        }
+        registerHistoryUndo(
+            operation: .restore,
+            item: item,
+            at: index,
+            undoManager: undoManager
+        )
     }
 
     private func registerDeleteRedo(
@@ -252,21 +266,63 @@ final class ClipboardStore: NSObject, ObservableObject {
         at index: Int,
         undoManager: UndoManager
     ) {
+        registerHistoryUndo(
+            operation: .delete,
+            item: item,
+            at: index,
+            undoManager: undoManager
+        )
+    }
+
+    private func registerHistoryUndo(
+        operation: ClipboardUndoAction.Operation,
+        item: ClipboardItem,
+        at index: Int,
+        undoManager: UndoManager
+    ) {
         let createsGroup = undoManager.groupingLevel == 0
         if createsGroup {
             undoManager.beginUndoGrouping()
         }
-        undoManager.registerUndo(withTarget: self) { store in
-            store.delete(item)
-            store.registerRestoreUndo(
-                for: item,
-                at: index,
-                undoManager: undoManager
-            )
-        }
+
+        let action = ClipboardUndoAction(
+            operation: operation,
+            item: item,
+            index: index,
+            undoManager: undoManager
+        )
+        undoManager.registerUndo(
+            withTarget: self,
+            selector: #selector(performHistoryUndo(_:)),
+            object: action
+        )
         undoManager.setActionName("删除剪贴板历史")
+
         if createsGroup {
             undoManager.endUndoGrouping()
+        }
+    }
+
+    @objc private func performHistoryUndo(_ action: ClipboardUndoAction) {
+        guard let undoManager = action.undoManager else {
+            return
+        }
+
+        switch action.operation {
+        case .restore:
+            restore(action.item, at: action.index)
+            registerDeleteRedo(
+                for: action.item,
+                at: action.index,
+                undoManager: undoManager
+            )
+        case .delete:
+            delete(action.item)
+            registerRestoreUndo(
+                for: action.item,
+                at: action.index,
+                undoManager: undoManager
+            )
         }
     }
 
