@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build release with warnings as errors
+        run: swift build -c release -Xswiftc -warnings-as-errors
+
+      - name: Run tests with warnings as errors
+        run: swift test -Xswiftc -warnings-as-errors
+
+      - name: Validate packaging files
+        run: |
+          bash -n script/*.sh
+          plutil -lint script/ClipDeck-Info.plist
