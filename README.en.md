@@ -68,7 +68,7 @@ Press `⌃⌥V`, click the item or choose it with the arrow keys, then press `Re
 
 ### Download the DMG (Apple silicon)
 
-[Download ClipDeck from the website](https://clipdeck-macos.aild-pricing.workers.dev/). The current build supports Apple silicon Macs (M series) running macOS 13 or later.
+[Download ClipDeck from the English website](https://clipdeck-macos.aild-pricing.workers.dev/en). The current build supports Apple silicon Macs (M series) running macOS 13 or later.
 
 Open the downloaded DMG and drag ClipDeck into Applications. This community build is ad-hoc signed; it is not signed with an Apple Developer ID and has not been notarized by Apple. If macOS blocks the first launch, follow the website instructions, verify the SHA-256 checksum, and use **Open Anyway** only if you trust this project and its source code.
 
