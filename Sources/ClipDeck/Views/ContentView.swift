@@ -66,16 +66,16 @@ struct ContentView: View {
             .frame(width: 0, height: 0)
         }
         .confirmationDialog(
-            "清空所有历史？",
+            L10n.string("清空所有历史？"),
             isPresented: $store.isClearConfirmationPresented,
             titleVisibility: .visible
         ) {
-            Button("清空 \(store.items.count) 条历史", role: .destructive) {
+            Button(clearHistoryButtonTitle, role: .destructive) {
                 clearHistory()
             }
-            Button("取消", role: .cancel) {}
+            Button(L10n.string("取消"), role: .cancel) {}
         } message: {
-            Text("此操作无法撤销，但不会影响当前系统剪贴板。")
+            Text(L10n.string("此操作无法撤销，但不会影响当前系统剪贴板。"))
         }
         .onAppear {
             store.startMonitoring()
@@ -105,52 +105,71 @@ struct ContentView: View {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var statusText: String {
-        let recordingStatus = store.isMonitoring ? "正在记录文字与图片" : "记录已暂停"
-        if hotKeyManager.errorMessage == nil {
-            return "\(recordingStatus) · 全局唤起 \(GlobalHotKeyManager.shortcutDescription)"
+    private var clearHistoryButtonTitle: String {
+        if store.items.count == 1 {
+            return L10n.string("清空 1 条历史")
         }
-        return "\(recordingStatus) · 全局快捷键不可用"
+        return L10n.string("清空 %lld 条历史", Int64(store.items.count))
+    }
+
+    private var statusText: String {
+        let recordingStatus = store.isMonitoring
+            ? L10n.string("正在记录文字与图片")
+            : L10n.string("记录已暂停")
+        if hotKeyManager.errorMessage == nil {
+            return L10n.string(
+                "%@ · 全局唤起 %@",
+                recordingStatus,
+                GlobalHotKeyManager.shortcutDescription
+            )
+        }
+        return L10n.string("%@ · 全局快捷键不可用", recordingStatus)
     }
 
     private var header: some View {
         VStack(spacing: 10) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("剪贴板历史")
+                    Text(L10n.string("剪贴板历史"))
                         .font(.title2.weight(.semibold))
 
                     Text(statusText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .accessibilityLabel("状态：\(statusText)")
+                        .accessibilityLabel(L10n.string("状态：%@", statusText))
                 }
 
                 Spacer()
 
                 AppSettingsButton(
-                    title: "设置",
+                    title: L10n.string("设置"),
                     systemImage: "gearshape"
                 )
-                .help("打开 ClipDeck 设置")
+                .help(L10n.string("打开 ClipDeck 设置"))
 
                 Button {
                     store.isMonitoring.toggle()
                 } label: {
                     Label(
-                        store.isMonitoring ? "暂停记录" : "开始记录",
+                        store.isMonitoring
+                            ? L10n.string("暂停记录")
+                            : L10n.string("开始记录"),
                         systemImage: store.isMonitoring ? "pause.fill" : "play.fill"
                     )
                 }
-                .help(store.isMonitoring ? "暂停记录新的剪贴板内容" : "开始记录新的剪贴板内容")
+                .help(
+                    store.isMonitoring
+                        ? L10n.string("暂停记录新的剪贴板内容")
+                        : L10n.string("开始记录新的剪贴板内容")
+                )
 
                 Button {
                     store.isClearConfirmationPresented = true
                 } label: {
-                    Label("清空历史", systemImage: "trash")
+                    Label(L10n.string("清空历史"), systemImage: "trash")
                 }
                 .disabled(store.items.isEmpty)
-                .help("清空所有历史")
+                .help(L10n.string("清空所有历史"))
             }
 
             HStack(spacing: 8) {
@@ -174,14 +193,14 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .keyboardShortcut("f", modifiers: .command)
-            .help("搜索历史（⌘F）")
-            .accessibilityLabel("聚焦搜索历史")
+            .help(L10n.string("搜索历史（⌘F）"))
+            .accessibilityLabel(L10n.string("聚焦搜索历史"))
 
-            TextField("搜索历史", text: $searchText)
+            TextField(L10n.string("搜索历史"), text: $searchText)
                 .textFieldStyle(.plain)
                 .focused($focusedArea, equals: .search)
-                .accessibilityLabel("搜索剪贴板历史")
-                .accessibilityHint("输入关键词筛选，按上下方向键选择结果")
+                .accessibilityLabel(L10n.string("搜索剪贴板历史"))
+                .accessibilityHint(L10n.string("输入关键词筛选，按上下方向键选择结果"))
 
             if !searchText.isEmpty {
                 Button(action: clearSearch) {
@@ -189,8 +208,8 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("清除搜索")
-                .accessibilityLabel("清除搜索")
+                .help(L10n.string("清除搜索"))
+                .accessibilityLabel(L10n.string("清除搜索"))
             }
         }
         .padding(.horizontal, 8)
@@ -205,16 +224,16 @@ struct ContentView: View {
             }
             .keyboardShortcut(.upArrow, modifiers: [])
             .disabled(!canSelectPreviousItem)
-            .help("上一条（↑）")
-            .accessibilityLabel("选择上一条历史")
+            .help(L10n.string("上一条（↑）"))
+            .accessibilityLabel(L10n.string("选择上一条历史"))
 
             Button(action: selectNextItem) {
                 Image(systemName: "chevron.down")
             }
             .keyboardShortcut(.downArrow, modifiers: [])
             .disabled(!canSelectNextItem)
-            .help("下一条（↓）")
-            .accessibilityLabel("选择下一条历史")
+            .help(L10n.string("下一条（↓）"))
+            .accessibilityLabel(L10n.string("选择下一条历史"))
         }
     }
 
@@ -252,7 +271,7 @@ struct ContentView: View {
                         .onTapGesture {
                             select(item)
                         }
-                        .accessibilityAction(named: "复制") {
+                        .accessibilityAction(named: Text(L10n.string("复制"))) {
                             copy(item)
                         }
 
@@ -265,9 +284,9 @@ struct ContentView: View {
                         }
                         .buttonStyle(.borderless)
                         .opacity(hoveredItemID == item.id || selectedItemID == item.id ? 1 : 0.4)
-                        .help("删除此条历史（可撤销）")
-                        .accessibilityLabel("删除：\(item.preview)")
-                        .accessibilityHint("删除后可从编辑菜单撤销")
+                        .help(L10n.string("删除此条历史（可撤销）"))
+                        .accessibilityLabel(L10n.string("删除：%@", item.preview))
+                        .accessibilityHint(L10n.string("删除后可从编辑菜单撤销"))
                     }
                     .tag(item.id)
                     .id(item.id)
@@ -275,13 +294,17 @@ struct ContentView: View {
                         hoveredItemID = isHovering ? item.id : nil
                     }
                     .contextMenu {
-                        Button(item.image == nil ? "复制文字到剪贴板" : "复制图片到剪贴板") {
+                        Button(
+                            item.image == nil
+                                ? L10n.string("复制文字到剪贴板")
+                                : L10n.string("复制图片到剪贴板")
+                        ) {
                             copy(item)
                         }
 
                         Divider()
 
-                        Button("删除", role: .destructive) {
+                        Button(L10n.string("删除"), role: .destructive) {
                             select(item)
                             delete(item)
                         }
@@ -290,7 +313,7 @@ struct ContentView: View {
             }
             .listStyle(.sidebar)
             .focused($focusedArea, equals: .history)
-            .accessibilityLabel("剪贴板历史列表")
+            .accessibilityLabel(L10n.string("剪贴板历史列表"))
             .onChange(of: selectedItemID) { newSelection in
                 guard let newSelection else {
                     return
@@ -366,10 +389,14 @@ struct ContentView: View {
     private func copy(_ item: ClipboardItem) {
         selectedItemID = item.id
         guard store.copy(item) else {
-            announce("复制失败")
+            announce(L10n.string("复制失败"))
             return
         }
-        announce(item.image == nil ? "文字已复制" : "图片已复制")
+        announce(
+            item.image == nil
+                ? L10n.string("文字已复制")
+                : L10n.string("图片已复制")
+        )
         windowCoordinator.returnToPreviousApplicationIfNeeded()
     }
 
@@ -399,7 +426,7 @@ struct ContentView: View {
 
         store.delete(item, undoManager: undoManager)
         selectedItemID = nextSelection
-        announce("已删除，可从编辑菜单撤销")
+        announce(L10n.string("已删除，可从编辑菜单撤销"))
 
         DispatchQueue.main.async {
             focusedArea = nextSelection == nil ? .search : .history
@@ -410,7 +437,7 @@ struct ContentView: View {
         store.clearHistory()
         selectedItemID = nil
         focusedArea = .search
-        announce("剪贴板历史已清空")
+        announce(L10n.string("剪贴板历史已清空"))
     }
 
     private func clearSearch() {

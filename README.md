@@ -1,5 +1,7 @@
 # ClipDeck
 
+<p align="right"><strong>简体中文</strong> · <a href="README.en.md">English</a></p>
+
 > macOS 原生、简洁、高效的会话级剪贴板历史工具。
 
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple) ![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white) [![CI](https://github.com/ifonly3/ClipDeck/actions/workflows/ci.yml/badge.svg)](https://github.com/ifonly3/ClipDeck/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
@@ -7,7 +9,7 @@
 ClipDeck 是一款 **macOS 原生、简洁、高效** 的剪贴板历史小程序。它使用 SwiftUI 与 AppKit 构建，没有 Electron、没有第三方运行时依赖，专注于快速找回刚刚复制过的文字和图片。
 
 <p align="center">
-  <img src="docs/screenshots/history-text.jpg" alt="ClipDeck 主窗口展示文字历史、搜索、单击选择和内容预览" width="760">
+  <img src="docs/screenshots/zh/history-text.png" alt="ClipDeck 主窗口展示文字历史、搜索、单击选择和内容预览" width="760">
 </p>
 
 <p align="center">
@@ -24,17 +26,18 @@ ClipDeck 是一款 **macOS 原生、简洁、高效** 的剪贴板历史小程�
 - **会话级隐私**：历史只保存在内存中，退出 ClipDeck 后自动清空，不写入磁盘、不上传。
 - **行为可控**：支持暂停记录、搜索、单条删除与撤销、清空确认、复制后返回原应用。
 - **系统级启动**：使用 macOS 原生登录项，不依赖常驻 LaunchAgent。
+- **中英双语**：界面支持简体中文与 English，并自动跟随 macOS 系统语言。
 
 ## 界面一览
 
 <table>
   <tr>
     <td width="60%" valign="top">
-      <img src="docs/screenshots/history-image.jpg" alt="ClipDeck 图片历史和大图预览">
+      <img src="docs/screenshots/zh/history-image.png" alt="ClipDeck 图片历史和大图预览">
       <br><sub><strong>图片历史</strong>：识别常见图片格式，并在详情区展示预览与尺寸。</sub>
     </td>
     <td width="40%" valign="top">
-      <img src="docs/screenshots/settings.jpg" alt="ClipDeck 原生设置窗口">
+      <img src="docs/screenshots/zh/settings.png" alt="ClipDeck 原生设置窗口">
       <br><sub><strong>原生设置</strong>：控制记录、复制后关闭和登录时启动。</sub>
     </td>
   </tr>
@@ -63,6 +66,14 @@ codex/clipboard-shortcuts
 
 ## 快速安装
 
+### 官网 DMG（Apple 芯片）
+
+[前往 ClipDeck 官网下载](https://clipdeck-macos.aild-pricing.workers.dev/)；适用于 Apple Silicon（M 系列）Mac，需要 macOS 13 或更高版本。
+
+下载后打开 DMG，将 ClipDeck 拖入“应用程序”。当前社区构建包采用 ad-hoc 签名，未使用 Apple Developer ID 且未经 Apple 公证；首次打开若被 macOS 拦截，请按照官网的完整说明核对 SHA-256 并选择“仍要打开”。
+
+### 从源码构建
+
 要求：macOS 13 或更高版本，以及 Xcode Command Line Tools / Swift 6。
 
 ```bash
@@ -72,8 +83,6 @@ cd ClipDeck
 ```
 
 脚本会构建 Release 版本、生成应用图标、进行 ad-hoc 签名和严格校验，然后安装到 `/Applications/ClipDeck.app` 并启动。
-
-> 当前源码安装采用 ad-hoc 签名，适合本机使用。面向其他用户分发时，应改用 Developer ID 签名、Hardened Runtime 与 Apple notarization。
 
 ## 使用方式
 

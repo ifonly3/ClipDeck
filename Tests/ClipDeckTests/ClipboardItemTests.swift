@@ -67,7 +67,7 @@ func imageClipboardContentCanBeCapturedSearchedAndCopiedBack() async throws {
     #expect(image.pixelWidth == 96)
     #expect(image.pixelHeight == 54)
     #expect(image.pasteboardType == .tiff)
-    #expect(item.preview == "图片 · 96×54")
+    #expect(item.preview == L10n.string("图片 · %@", "96×54"))
     #expect(store.filteredItems(matching: "图片").count == 1)
 
     store.copy(item)

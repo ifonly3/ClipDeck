@@ -25,7 +25,7 @@ struct ClipboardDetailView: View {
     private var header: some View {
         HStack(spacing: 10) {
             Label(
-                item.image == nil ? "文字" : "图片",
+                item.image == nil ? L10n.string("文字") : L10n.string("图片"),
                 systemImage: item.image == nil ? "doc.text" : "photo"
             )
             .font(.headline)
@@ -37,24 +37,27 @@ struct ClipboardDetailView: View {
             Spacer()
 
             if isCopied {
-                Label("已复制", systemImage: "checkmark.circle.fill")
+                Label(L10n.string("已复制"), systemImage: "checkmark.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.tint)
-                    .accessibilityLabel("状态：已复制")
+                    .accessibilityLabel(L10n.string("状态：已复制"))
             }
 
             Button(role: .destructive, action: onDelete) {
-                Label("删除", systemImage: "trash")
+                Label(L10n.string("删除"), systemImage: "trash")
             }
-            .help("删除此条历史（Delete，可撤销）")
-            .accessibilityHint("删除后可从编辑菜单撤销")
+            .help(L10n.string("删除此条历史（Delete，可撤销）"))
+            .accessibilityHint(L10n.string("删除后可从编辑菜单撤销"))
 
             Button(action: onCopy) {
-                Label(isCopied ? "再次复制" : "复制", systemImage: "doc.on.doc")
+                Label(
+                    isCopied ? L10n.string("再次复制") : L10n.string("复制"),
+                    systemImage: "doc.on.doc"
+                )
             }
             .keyboardShortcut(.defaultAction)
-            .help("复制到系统剪贴板（Return）")
-            .accessibilityHint("将内容复制到系统剪贴板")
+            .help(L10n.string("复制到系统剪贴板（Return）"))
+            .accessibilityHint(L10n.string("将内容复制到系统剪贴板"))
         }
         .padding(14)
     }
@@ -70,7 +73,7 @@ struct ClipboardDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .padding(18)
             }
-            .accessibilityLabel("文字内容")
+            .accessibilityLabel(L10n.string("文字内容"))
 
         case .image(let image):
             VStack(spacing: 14) {
@@ -81,7 +84,7 @@ struct ClipboardDetailView: View {
                     .interpolation(.high)
                     .scaledToFit()
                     .frame(maxWidth: 420, maxHeight: 320)
-                    .accessibilityLabel("图片预览，\(image.dimensionsText)")
+                    .accessibilityLabel(L10n.string("图片预览，%@", image.dimensionsText))
 
                 Text(image.dimensionsText)
                     .font(.caption)
@@ -98,14 +101,20 @@ struct ClipboardDetailView: View {
         HStack(spacing: 6) {
             Image(systemName: "keyboard")
                 .accessibilityHidden(true)
-            Text("单击选择 · ↑↓ 切换 · Return 复制 · Delete 删除 · Esc 关闭")
+            Text(
+                L10n.string("单击选择 · ↑↓ 切换 · Return 复制 · Delete 删除 · Esc 关闭")
+            )
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("操作：单击选择，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口")
+        .accessibilityLabel(
+            L10n.string(
+                "操作：单击选择，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口"
+            )
+        )
     }
 }
 
@@ -117,10 +126,10 @@ struct ClipboardDetailPlaceholderView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            Text("选择一条历史以预览")
+            Text(L10n.string("选择一条历史以预览"))
                 .font(.headline)
 
-            Text("使用 ↑↓ 选择，按 Return 复制。")
+            Text(L10n.string("使用 ↑↓ 选择，按 Return 复制。"))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

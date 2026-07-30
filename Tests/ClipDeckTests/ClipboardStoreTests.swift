@@ -54,7 +54,8 @@ func oversizedTextIsRejectedWithAVisibleWarning() throws {
 
     #expect(store.items.isEmpty)
     #expect(store.captureWarning?.contains("4") == true)
-    #expect(store.captureWarning?.contains("未记录") == true)
+    let maximumSize = ByteCountFormatter.string(fromByteCount: 4, countStyle: .file)
+    #expect(store.captureWarning == L10n.string("文字超过 %@，未记录。", maximumSize))
 }
 
 @Test @MainActor
@@ -144,10 +145,16 @@ func readFailuresAreBoundedAndRecoverOnTheNextClipboardChange() throws {
 
     pasteboard.declareTypes([.string], owner: nil)
     store.pollPasteboard()
-    #expect(store.captureWarning?.contains("自动重试") == true)
+    #expect(
+        store.captureWarning
+            == L10n.string("检测到文字，但暂时无法读取；将自动重试。")
+    )
     store.pollPasteboard()
     store.pollPasteboard()
-    #expect(store.captureWarning?.contains("连续多次读取失败") == true)
+    #expect(
+        store.captureWarning
+            == L10n.string("文字连续多次读取失败，本次未记录。")
+    )
 
     pasteboard.clearContents()
     #expect(pasteboard.setString("恢复读取", forType: .string))
