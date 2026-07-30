@@ -98,14 +98,14 @@ struct ClipboardDetailView: View {
         HStack(spacing: 6) {
             Image(systemName: "keyboard")
                 .accessibilityHidden(true)
-            Text("↑↓ 选择 · Return 复制 · Delete 删除 · Esc 关闭")
+            Text("单击选择 · ↑↓ 切换 · Return 复制 · Delete 删除 · Esc 关闭")
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("键盘操作：上下方向键选择，回车复制，删除键删除，Escape 关闭窗口")
+        .accessibilityLabel("操作：单击选择，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口")
     }
 }
 

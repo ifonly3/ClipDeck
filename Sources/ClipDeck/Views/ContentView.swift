@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var selectedItemID: ClipboardItem.ID?
     @State private var hoveredItemID: ClipboardItem.ID?
+    @State private var searchFocusRequestID = UUID()
     @FocusState private var focusedArea: FocusArea?
 
     private var filteredItems: [ClipboardItem] {
@@ -61,13 +62,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 620, minHeight: 440)
         .background {
-            WindowKeyboardBridge {
-                if store.isClearConfirmationPresented {
-                    store.isClearConfirmationPresented = false
-                } else {
-                    closeWindow()
-                }
-            }
+            WindowKeyboardBridge(onEscape: handleEscape)
             .frame(width: 0, height: 0)
         }
         .confirmationDialog(
@@ -92,21 +87,16 @@ struct ContentView: View {
             stabilizeSelection()
         }
         .onDeleteCommand(perform: deleteSelectedItem)
-        .onExitCommand(perform: closeWindow)
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) {
-            notification in
-            guard let window = notification.object as? NSWindow,
-                  window.title == "ClipDeck" else {
-                return
-            }
+        .onReceive(NotificationCenter.default.publisher(for: .clipDeckMainWindowPresented)) { _ in
             scheduleSearchFocus()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) {
             notification in
             guard let window = notification.object as? NSWindow,
-                  window.title == "ClipDeck" else {
+                  WindowCoordinator.isMainWindow(window) else {
                 return
             }
+            store.isClearConfirmationPresented = false
             windowCoordinator.forgetPreviousApplication()
         }
     }
@@ -137,6 +127,12 @@ struct ContentView: View {
                 }
 
                 Spacer()
+
+                AppSettingsButton(
+                    title: "设置",
+                    systemImage: "gearshape"
+                )
+                .help("打开 ClipDeck 设置")
 
                 Button {
                     store.isMonitoring.toggle()
@@ -253,15 +249,15 @@ struct ContentView: View {
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            copy(item)
+                        .onTapGesture {
+                            select(item)
                         }
                         .accessibilityAction(named: "复制") {
                             copy(item)
                         }
 
                         Button(role: .destructive) {
-                            selectedItemID = item.id
+                            select(item)
                             delete(item)
                         } label: {
                             Image(systemName: "trash")
@@ -286,7 +282,7 @@ struct ContentView: View {
                         Divider()
 
                         Button("删除", role: .destructive) {
-                            selectedItemID = item.id
+                            select(item)
                             delete(item)
                         }
                     }
@@ -299,9 +295,7 @@ struct ContentView: View {
                 guard let newSelection else {
                     return
                 }
-                withAnimation(.easeOut(duration: 0.12)) {
-                    proxy.scrollTo(newSelection, anchor: .center)
-                }
+                proxy.scrollTo(newSelection)
             }
         }
     }
@@ -348,6 +342,12 @@ struct ContentView: View {
             filteredItems.index(before: filteredItems.endIndex)
         )
         selectedItemID = filteredItems[destination].id
+        focusedArea = .history
+    }
+
+    private func select(_ item: ClipboardItem) {
+        searchFocusRequestID = UUID()
+        selectedItemID = item.id
         focusedArea = .history
     }
 
@@ -400,11 +400,16 @@ struct ContentView: View {
         store.delete(item, undoManager: undoManager)
         selectedItemID = nextSelection
         announce("已删除，可从编辑菜单撤销")
+
+        DispatchQueue.main.async {
+            focusedArea = nextSelection == nil ? .search : .history
+        }
     }
 
     private func clearHistory() {
         store.clearHistory()
         selectedItemID = nil
+        focusedArea = .search
         announce("剪贴板历史已清空")
     }
 
@@ -426,9 +431,21 @@ struct ContentView: View {
         windowCoordinator.returnToPreviousApplication(closeKeyWindow: true)
     }
 
+    private func handleEscape() {
+        if store.isClearConfirmationPresented {
+            store.isClearConfirmationPresented = false
+        } else {
+            closeWindow()
+        }
+    }
+
     private func scheduleSearchFocus() {
+        let requestID = UUID()
+        searchFocusRequestID = requestID
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            guard NSApp.keyWindow?.title == "ClipDeck" else {
+            guard searchFocusRequestID == requestID,
+                  WindowCoordinator.isMainWindow(NSApp.keyWindow) else {
                 return
             }
             focusedArea = .search
