@@ -46,7 +46,15 @@ struct WindowKeyboardBridge: NSViewRepresentable {
                 guard event.keyCode == 53,
                       let self,
                       let hostWindow = self.hostView?.window,
-                      event.window === hostWindow else {
+                      event.window === hostWindow,
+                      hostWindow.attachedSheet == nil,
+                      event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
+                else {
+                    return event
+                }
+
+                if let textView = hostWindow.firstResponder as? NSTextView,
+                   textView.hasMarkedText() {
                     return event
                 }
 

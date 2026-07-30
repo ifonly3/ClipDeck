@@ -115,7 +115,11 @@ struct MenuBarContentView: View {
             .keyboardShortcut("o", modifiers: .command)
             .accessibilityHint("打开可搜索的完整历史窗口")
 
-            settingsControl
+            AppSettingsButton(
+                title: "设置…",
+                systemImage: nil,
+                beforeOpen: { dismiss() }
+            )
 
             Spacer()
 
@@ -220,16 +224,4 @@ struct MenuBarContentView: View {
         )
     }
 
-    @ViewBuilder
-    private var settingsControl: some View {
-        if #available(macOS 14.0, *) {
-            SettingsLink {
-                Text("设置…")
-            }
-        } else {
-            Button("设置…") {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            }
-        }
-    }
 }
