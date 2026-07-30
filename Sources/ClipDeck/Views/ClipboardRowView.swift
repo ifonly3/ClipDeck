@@ -18,7 +18,7 @@ struct ClipboardRowView: View {
                     Text(item.timestampText)
 
                     if isCopied {
-                        Label("已复制", systemImage: "checkmark.circle.fill")
+                        Label(L10n.string("已复制"), systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.tint)
                     }
                 }
@@ -32,13 +32,19 @@ struct ClipboardRowView: View {
         .padding(.vertical, 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint("选择后按回车，或使用“复制”操作")
+        .accessibilityHint(L10n.string("选择后按回车，或使用“复制”操作"))
     }
 
     private var accessibilityLabel: String {
-        let contentType = item.image == nil ? "文字" : "图片"
-        let copyStatus = isCopied ? "，已复制" : ""
-        return "\(contentType)，\(item.preview)，\(item.timestampText)\(copyStatus)"
+        let contentType = item.image == nil ? L10n.string("文字") : L10n.string("图片")
+        let copyStatus = isCopied ? L10n.string("，已复制") : ""
+        return L10n.string(
+            "历史项目：%@，%@，%@%@",
+            contentType,
+            item.preview,
+            item.timestampText,
+            copyStatus
+        )
     }
 
     @ViewBuilder

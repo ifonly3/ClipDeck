@@ -27,7 +27,9 @@ while IFS= read -r pid; do
     exit 1
   }
 
-  if ! command_path="$(ps -p "$pid" -o command= 2>/dev/null)"; then
+  # `command` includes launch arguments (for example AppleLanguages during
+  # localization QA), while `comm` is the executable path we need to verify.
+  if ! command_path="$(ps -ww -p "$pid" -o comm= 2>/dev/null)"; then
     if kill -0 "$pid" 2>/dev/null; then
       echo "Unable to inspect ClipDeck process $pid; installation stopped." >&2
       exit 1
@@ -47,7 +49,7 @@ while IFS= read -r pid; do
 done <<<"$PGREP_OUTPUT"
 
 for pid in "${PIDS[@]}"; do
-  if ! current_path="$(ps -p "$pid" -o command= 2>/dev/null)"; then
+  if ! current_path="$(ps -ww -p "$pid" -o comm= 2>/dev/null)"; then
     continue
   fi
   case "$current_path" in
@@ -68,7 +70,7 @@ done
 for _ in {1..50}; do
   remaining=false
   for pid in "${PIDS[@]}"; do
-    if ! current_path="$(ps -p "$pid" -o command= 2>/dev/null)"; then
+    if ! current_path="$(ps -ww -p "$pid" -o comm= 2>/dev/null)"; then
       continue
     fi
     case "$current_path" in

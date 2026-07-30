@@ -46,7 +46,14 @@ trap cleanup EXIT
 
 cd "$ROOT_DIR"
 swift build -c "$CONFIGURATION" --product "$APP_NAME"
-BUILD_BINARY="$(swift build -c "$CONFIGURATION" --show-bin-path)/$APP_NAME"
+BUILD_DIRECTORY="$(swift build -c "$CONFIGURATION" --show-bin-path)"
+BUILD_BINARY="$BUILD_DIRECTORY/$APP_NAME"
+RESOURCE_BUNDLE="$BUILD_DIRECTORY/${APP_NAME}_${APP_NAME}.bundle"
+
+if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
+  echo "missing SwiftPM resource bundle: $RESOURCE_BUNDLE" >&2
+  exit 1
+fi
 
 STAGED_APP="$STAGING_ROOT/$APP_NAME.app"
 STAGED_CONTENTS="$STAGED_APP/Contents"
@@ -58,6 +65,23 @@ mkdir -p "$STAGED_MACOS" "$STAGED_RESOURCES"
 /usr/bin/ditto "$BUILD_BINARY" "$STAGED_MACOS/$APP_NAME"
 chmod +x "$STAGED_MACOS/$APP_NAME"
 /usr/bin/ditto "$INFO_TEMPLATE" "$STAGED_CONTENTS/Info.plist"
+/usr/bin/ditto "$RESOURCE_BUNDLE" "$STAGED_RESOURCES/$(basename "$RESOURCE_BUNDLE")"
+
+# InfoPlist.strings must live directly in the app's localized resource folders;
+# Localizable.strings remains in the SwiftPM module bundle resolved by L10n.
+for LOCALIZATION in en zh-Hans; do
+  RESOURCE_LOCALIZATION="$LOCALIZATION"
+  if [[ "$LOCALIZATION" == "zh-Hans" ]]; then
+    RESOURCE_LOCALIZATION="zh-hans"
+  fi
+  LOCALIZED_INFO="$RESOURCE_BUNDLE/$RESOURCE_LOCALIZATION.lproj/InfoPlist.strings"
+  if [[ ! -f "$LOCALIZED_INFO" ]]; then
+    echo "missing localized Info.plist strings: $LOCALIZED_INFO" >&2
+    exit 1
+  fi
+  mkdir -p "$STAGED_RESOURCES/$LOCALIZATION.lproj"
+  /usr/bin/ditto "$LOCALIZED_INFO" "$STAGED_RESOURCES/$LOCALIZATION.lproj/InfoPlist.strings"
+done
 
 /usr/bin/xcrun swift "$ICON_GENERATOR" "$ICONSET"
 /usr/bin/iconutil -c icns --output "$STAGED_RESOURCES/AppIcon.icns" "$ICONSET"

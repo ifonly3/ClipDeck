@@ -16,7 +16,7 @@ struct ClipboardWarningsView: View {
                         message: hotKeyError,
                         systemImage: "keyboard.badge.exclamationmark",
                         isCompact: isCompact,
-                        actionTitle: "重试",
+                        actionTitle: L10n.string("重试"),
                         action: onRetryHotKey
                     )
                 }
@@ -80,7 +80,7 @@ private struct WarningBanner: View {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .controlSize(.small)
-                    .accessibilityHint("再次尝试启用全局快捷键")
+                    .accessibilityHint(L10n.string("再次尝试启用全局快捷键"))
             }
         }
         .padding(.horizontal, isCompact ? 8 : 10)

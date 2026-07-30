@@ -132,7 +132,9 @@ final class ClipboardStore: NSObject, ObservableObject {
         super.init()
 
         if performsLegacyCleanup, !Self.removeLegacyStoredHistory() {
-            storageWarning = "无法删除旧版本地历史；请退出应用后检查 Application Support/ClipDeck。"
+            storageWarning = L10n.string(
+                "无法删除旧版本地历史；请退出应用后检查 Application Support/ClipDeck。"
+            )
         }
         refreshAccessStatus()
         if startsMonitoring, isMonitoring {
@@ -179,14 +181,16 @@ final class ClipboardStore: NSObject, ObservableObject {
         case .text(let text):
             let pasteboardItem = NSPasteboardItem()
             guard pasteboardItem.setString(text, forType: .string) else {
-                setCaptureWarning("无法准备这段文字，请稍后再试。")
+                setCaptureWarning(L10n.string("无法准备这段文字，请稍后再试。"))
                 return false
             }
             pasteboard.clearContents()
             didCopy = pasteboard.writeObjects([pasteboardItem])
         case .image(let image):
             guard let pasteboardItem = makePasteboardItem(for: image) else {
-                setCaptureWarning("这张图片暂时无法复制，请重新截取或复制原图。")
+                setCaptureWarning(
+                    L10n.string("这张图片暂时无法复制，请重新截取或复制原图。")
+                )
                 return false
             }
             pasteboard.clearContents()
@@ -194,7 +198,7 @@ final class ClipboardStore: NSObject, ObservableObject {
         }
 
         guard didCopy else {
-            setCaptureWarning("无法写入系统剪切板，请稍后再试。")
+            setCaptureWarning(L10n.string("无法写入系统剪切板，请稍后再试。"))
             return false
         }
 
@@ -296,7 +300,7 @@ final class ClipboardStore: NSObject, ObservableObject {
             selector: #selector(performHistoryUndo(_:)),
             object: action
         )
-        undoManager.setActionName("删除剪贴板历史")
+        undoManager.setActionName(L10n.string("删除剪贴板历史"))
 
         if createsGroup {
             undoManager.endUndoGrouping()
@@ -405,7 +409,7 @@ final class ClipboardStore: NSObject, ObservableObject {
         guard captureTasks.count < configuration.maximumPendingImageCaptures else {
             lastChangeCount = changeCount
             resetReadRetryState()
-            setCaptureWarning("图片处理队列已满，本次未记录。")
+            setCaptureWarning(L10n.string("图片处理队列已满，本次未记录。"))
             return
         }
 
@@ -439,10 +443,14 @@ final class ClipboardStore: NSObject, ObservableObject {
         guard !candidates.isEmpty else {
             if encounteredReadFailure {
                 if registerReadFailureAndShouldRetry(changeCount: changeCount) {
-                    setCaptureWarning("检测到图片，但暂时无法读取；将自动重试。")
+                    setCaptureWarning(
+                        L10n.string("检测到图片，但暂时无法读取；将自动重试。")
+                    )
                 } else {
                     lastChangeCount = changeCount
-                    setCaptureWarning("图片连续多次读取失败，本次未记录。")
+                    setCaptureWarning(
+                        L10n.string("图片连续多次读取失败，本次未记录。")
+                    )
                 }
             }
             return
@@ -526,10 +534,10 @@ final class ClipboardStore: NSObject, ObservableObject {
 
     private func handlePasteboardMetadataReadFailure(changeCount: Int) {
         if registerReadFailureAndShouldRetry(changeCount: changeCount) {
-            setCaptureWarning("暂时无法读取剪贴板类型；将自动重试。")
+            setCaptureWarning(L10n.string("暂时无法读取剪贴板类型；将自动重试。"))
         } else {
             lastChangeCount = changeCount
-            setCaptureWarning("剪贴板连续多次读取失败，本次未记录。")
+            setCaptureWarning(L10n.string("剪贴板连续多次读取失败，本次未记录。"))
         }
     }
 
@@ -561,10 +569,14 @@ final class ClipboardStore: NSObject, ObservableObject {
         guard let text = pasteboard.string(forType: .string) else {
             if advertisedTypes.contains(.string) {
                 if registerReadFailureAndShouldRetry(changeCount: changeCount) {
-                    setCaptureWarning("检测到文字，但暂时无法读取；将自动重试。")
+                    setCaptureWarning(
+                        L10n.string("检测到文字，但暂时无法读取；将自动重试。")
+                    )
                 } else {
                     lastChangeCount = changeCount
-                    setCaptureWarning("文字连续多次读取失败，本次未记录。")
+                    setCaptureWarning(
+                        L10n.string("文字连续多次读取失败，本次未记录。")
+                    )
                 }
                 return
             }
@@ -587,7 +599,7 @@ final class ClipboardStore: NSObject, ObservableObject {
                 fromByteCount: Int64(configuration.maximumTextBytes),
                 countStyle: .file
             )
-            setCaptureWarning("文字超过 \(maximumSize)，未记录。")
+            setCaptureWarning(L10n.string("文字超过 %@，未记录。", maximumSize))
             return
         }
 
@@ -692,15 +704,15 @@ final class ClipboardStore: NSObject, ObservableObject {
     private func warningMessage(for failure: ImageProcessingFailure) -> String {
         switch failure {
         case .cancelled:
-            return "图片处理已取消。"
+            return L10n.string("图片处理已取消。")
         case .rawDataTooLarge:
-            return "图片原始数据过大，未记录。"
+            return L10n.string("图片原始数据过大，未记录。")
         case .finalDataTooLarge:
-            return "图片超过 32 MB，未记录。"
+            return L10n.string("图片超过 32 MB，未记录。")
         case .dimensionsTooLarge:
-            return "图片尺寸超过 2000 万像素，未记录。"
+            return L10n.string("图片尺寸超过 2000 万像素，未记录。")
         case .invalidFormat, .thumbnailCreationFailed:
-            return "检测到图片，但格式无法解析。"
+            return L10n.string("检测到图片，但格式无法解析。")
         }
     }
 
@@ -748,7 +760,9 @@ final class ClipboardStore: NSObject, ObservableObject {
         if #available(macOS 15.4, *) {
             switch pasteboard.accessBehavior {
             case .alwaysDeny:
-                updatedStatus = "系统已禁止 ClipDeck 读取剪贴板。请在“系统设置 > 隐私与安全性 > 剪贴板”中允许它。"
+                updatedStatus = L10n.string(
+                    "系统已禁止 ClipDeck 读取剪贴板。请在“系统设置 > 隐私与安全性 > 剪贴板”中允许它。"
+                )
             case .default, .ask, .alwaysAllow:
                 updatedStatus = nil
             @unknown default:

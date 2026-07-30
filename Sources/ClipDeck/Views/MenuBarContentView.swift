@@ -43,43 +43,58 @@ struct MenuBarContentView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text("最近剪贴板")
+                Text(L10n.string("最近剪贴板"))
                     .font(.headline)
 
                 Spacer()
 
-                Toggle("记录", isOn: $store.isMonitoring)
+                Toggle(L10n.string("记录"), isOn: $store.isMonitoring)
                     .toggleStyle(.switch)
                     .controlSize(.small)
-                    .accessibilityHint(store.isMonitoring ? "关闭后暂停记录新内容" : "打开后开始记录新内容")
+                    .accessibilityHint(
+                        store.isMonitoring
+                            ? L10n.string("关闭后暂停记录新内容")
+                            : L10n.string("打开后开始记录新内容")
+                    )
             }
 
             Text(statusText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .accessibilityLabel("状态：\(statusText)")
+                .accessibilityLabel(L10n.string("状态：%@", statusText))
         }
     }
 
     private var statusText: String {
         if !store.isMonitoring {
-            return "记录已暂停"
+            return L10n.string("记录已暂停")
         }
         if hotKeyManager.errorMessage != nil {
-            return "全局快捷键不可用"
+            return L10n.string("全局快捷键不可用")
         }
-        return "全局快捷键：\(GlobalHotKeyManager.shortcutDescription)"
+        return L10n.string(
+            "全局快捷键：%@",
+            GlobalHotKeyManager.shortcutDescription
+        )
     }
 
     @ViewBuilder
     private var recentHistory: some View {
         if recentItems.isEmpty {
-            Text(store.isMonitoring ? "复制文字或图片后会显示在这里。" : "开启“记录”后开始保存新的内容。")
+            Text(
+                store.isMonitoring
+                    ? L10n.string("复制文字或图片后会显示在这里。")
+                    : L10n.string("开启“记录”后开始保存新的内容。")
+            )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
                 .multilineTextAlignment(.center)
-                .accessibilityLabel(store.isMonitoring ? "暂无剪贴板历史" : "记录已暂停")
+                .accessibilityLabel(
+                    store.isMonitoring
+                        ? L10n.string("暂无剪贴板历史")
+                        : L10n.string("记录已暂停")
+                )
         } else {
             ScrollView {
                 LazyVStack(spacing: 2) {
@@ -98,35 +113,35 @@ struct MenuBarContentView: View {
                             hoveredItemID = isHovering ? item.id : nil
                         }
                         .accessibilityLabel(menuAccessibilityLabel(for: item))
-                        .accessibilityHint("复制到系统剪贴板")
+                        .accessibilityHint(L10n.string("复制到系统剪贴板"))
                     }
                 }
             }
             .frame(maxHeight: 270)
-            .accessibilityLabel("最近八条剪贴板历史")
+            .accessibilityLabel(L10n.string("最近八条剪贴板历史"))
         }
     }
 
     private var footer: some View {
         HStack {
-            Button("打开历史") {
+            Button(L10n.string("打开历史")) {
                 openHistory()
             }
             .keyboardShortcut("o", modifiers: .command)
-            .accessibilityHint("打开可搜索的完整历史窗口")
+            .accessibilityHint(L10n.string("打开可搜索的完整历史窗口"))
 
             AppSettingsButton(
-                title: "设置…",
+                title: L10n.string("设置…"),
                 systemImage: nil,
                 beforeOpen: { dismiss() }
             )
 
             Spacer()
 
-            Button("退出 ClipDeck") {
+            Button(L10n.string("退出 ClipDeck")) {
                 NSApp.terminate(nil)
             }
-            .accessibilityHint("退出后会清除本次会话的历史")
+            .accessibilityHint(L10n.string("退出后会清除本次会话的历史"))
         }
     }
 
@@ -184,17 +199,29 @@ struct MenuBarContentView: View {
     }
 
     private func menuAccessibilityLabel(for item: ClipboardItem) -> String {
-        let contentType = item.image == nil ? "文字" : "图片"
-        let copiedStatus = store.lastCopiedItemID == item.id ? "，已复制" : ""
-        return "\(contentType)，\(item.preview)，\(item.timestampText)\(copiedStatus)"
+        let contentType = item.image == nil ? L10n.string("文字") : L10n.string("图片")
+        let copiedStatus = store.lastCopiedItemID == item.id
+            ? L10n.string("，已复制")
+            : ""
+        return L10n.string(
+            "历史项目：%@，%@，%@%@",
+            contentType,
+            item.preview,
+            item.timestampText,
+            copiedStatus
+        )
     }
 
     private func copy(_ item: ClipboardItem) {
         guard store.copy(item) else {
-            announce("复制失败")
+            announce(L10n.string("复制失败"))
             return
         }
-        announce(item.image == nil ? "文字已复制" : "图片已复制")
+        announce(
+            item.image == nil
+                ? L10n.string("文字已复制")
+                : L10n.string("图片已复制")
+        )
         dismiss()
     }
 

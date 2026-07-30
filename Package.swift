@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "ClipDeck",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v13)
     ],
@@ -12,7 +13,10 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "ClipDeck"
+            name: "ClipDeck",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .testTarget(
             name: "ClipDeckTests",

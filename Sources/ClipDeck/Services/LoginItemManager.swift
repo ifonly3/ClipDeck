@@ -68,7 +68,9 @@ final class LoginItemManager: ObservableObject {
 
     func setEnabled(_ enabled: Bool) {
         guard canManageLoginItem else {
-            errorMessage = "请先把 ClipDeck 安装到“应用程序”文件夹，再设置登录时启动。"
+            errorMessage = L10n.string(
+                "请先把 ClipDeck 安装到“应用程序”文件夹，再设置登录时启动。"
+            )
             return
         }
 
@@ -83,8 +85,9 @@ final class LoginItemManager: ObservableObject {
             let legacyError = errorMessage
             unregisterNativeService()
             if !didDisableLegacy {
-                errorMessage = legacyError
-                    ?? "无法关闭旧版启动项，请在系统设置的登录项中检查 ClipDeck。"
+                errorMessage = legacyError ?? L10n.string(
+                    "无法关闭旧版启动项，请在系统设置的登录项中检查 ClipDeck。"
+                )
             }
         }
     }
@@ -133,7 +136,9 @@ final class LoginItemManager: ObservableObject {
                 }
             }
         case .invalid:
-            let legacyWarning = "发现同名旧启动项，但内容不符合 ClipDeck 的安全迁移规则；已保留原文件。"
+            let legacyWarning = L10n.string(
+                "发现同名旧启动项，但内容不符合 ClipDeck 的安全迁移规则；已保留原文件。"
+            )
             reconcileNativeService()
             if errorMessage == nil {
                 errorMessage = legacyWarning
@@ -152,7 +157,9 @@ final class LoginItemManager: ObservableObject {
         }
 
         if requiresApproval {
-            errorMessage = "需要在“系统设置 > 通用 > 登录项”中允许 ClipDeck。"
+            errorMessage = L10n.string(
+                "需要在“系统设置 > 通用 > 登录项”中允许 ClipDeck。"
+            )
             return
         }
 
@@ -176,7 +183,9 @@ final class LoginItemManager: ObservableObject {
             return
         }
         if requiresApproval {
-            errorMessage = "需要在“系统设置 > 通用 > 登录项”中允许 ClipDeck。"
+            errorMessage = L10n.string(
+                "需要在“系统设置 > 通用 > 登录项”中允许 ClipDeck。"
+            )
             return
         }
 
@@ -187,13 +196,18 @@ final class LoginItemManager: ObservableObject {
                 markRegistrationCurrent()
                 errorMessage = nil
             } else if requiresApproval {
-                errorMessage = "需要在“系统设置 > 通用 > 登录项”中允许 ClipDeck。"
+                errorMessage = L10n.string(
+                    "需要在“系统设置 > 通用 > 登录项”中允许 ClipDeck。"
+                )
             } else {
-                errorMessage = "系统没有启用 ClipDeck 登录项，请稍后重试。"
+                errorMessage = L10n.string("系统没有启用 ClipDeck 登录项，请稍后重试。")
             }
         } catch {
             refreshStatus()
-            errorMessage = "无法启用登录时启动：\(error.localizedDescription)"
+            errorMessage = L10n.string(
+                "无法启用登录时启动：%@",
+                error.localizedDescription
+            )
         }
     }
 
@@ -201,7 +215,7 @@ final class LoginItemManager: ObservableObject {
         refreshStatus()
         guard isRegistered else {
             defaults.removeObject(forKey: Self.registeredVersionKey)
-            if errorMessage?.contains("旧版启动项") != true {
+            if !isLegacyItemError(errorMessage) {
                 errorMessage = nil
             }
             return
@@ -211,12 +225,15 @@ final class LoginItemManager: ObservableObject {
             try service.unregister()
             refreshStatus()
             defaults.removeObject(forKey: Self.registeredVersionKey)
-            if errorMessage?.contains("旧版启动项") != true {
+            if !isLegacyItemError(errorMessage) {
                 errorMessage = nil
             }
         } catch {
             refreshStatus()
-            errorMessage = "无法关闭登录时启动：\(error.localizedDescription)"
+            errorMessage = L10n.string(
+                "无法关闭登录时启动：%@",
+                error.localizedDescription
+            )
         }
     }
 
@@ -230,9 +247,11 @@ final class LoginItemManager: ObservableObject {
             refreshStatus()
             guard isEnabled else {
                 if requiresApproval {
-                    errorMessage = "需要在“系统设置 > 通用 > 登录项”中允许 ClipDeck。"
+                    errorMessage = L10n.string(
+                        "需要在“系统设置 > 通用 > 登录项”中允许 ClipDeck。"
+                    )
                 } else {
-                    errorMessage = "更新登录项后系统未确认启用，请重试。"
+                    errorMessage = L10n.string("更新登录项后系统未确认启用，请重试。")
                 }
                 return
             }
@@ -240,7 +259,7 @@ final class LoginItemManager: ObservableObject {
             errorMessage = nil
         } catch {
             refreshStatus()
-            errorMessage = "更新登录项失败：\(error.localizedDescription)"
+            errorMessage = L10n.string("更新登录项失败：%@", error.localizedDescription)
         }
     }
 
@@ -288,13 +307,19 @@ final class LoginItemManager: ObservableObject {
         if !nativeWasEnabled {
             registerNativeService()
             guard isEnabled else {
-                errorMessage = "旧登录项仍然保留；\(errorMessage ?? "原生登录项尚未启用。")"
+                errorMessage = L10n.string(
+                    "旧登录项仍然保留；%@",
+                    errorMessage ?? L10n.string("原生登录项尚未启用。")
+                )
                 return
             }
         } else if registeredVersion != currentBundleVersion {
             refreshRegistrationForCurrentBuild()
             guard isEnabled else {
-                errorMessage = "旧登录项仍然保留；\(errorMessage ?? "无法更新原生登录项。")"
+                errorMessage = L10n.string(
+                    "旧登录项仍然保留；%@",
+                    errorMessage ?? L10n.string("无法更新原生登录项。")
+                )
                 return
             }
         }
@@ -311,7 +336,10 @@ final class LoginItemManager: ObservableObject {
                 try? service.unregister()
                 refreshStatus()
             }
-            errorMessage = "旧登录项仍然保留；无法卸载旧启动任务（错误码 \(bootoutResult.status)）。"
+            errorMessage = L10n.string(
+                "旧登录项仍然保留；无法卸载旧启动任务（错误码 %d）。",
+                bootoutResult.status
+            )
             return
         }
 
@@ -327,8 +355,17 @@ final class LoginItemManager: ObservableObject {
                 try? service.unregister()
                 refreshStatus()
             }
-            let rollbackSuffix = rollback.status == 0 ? "" : "，且旧任务恢复失败（错误码 \(rollback.status)）"
-            errorMessage = "旧登录项仍然保留；无法完成安全迁移：\(error.localizedDescription)\(rollbackSuffix)"
+            let rollbackSuffix = rollback.status == 0
+                ? ""
+                : L10n.string(
+                    "，且旧任务恢复失败（错误码 %d）",
+                    rollback.status
+                )
+            errorMessage = L10n.string(
+                "旧登录项仍然保留；无法完成安全迁移：%@%@",
+                error.localizedDescription,
+                rollbackSuffix
+            )
             return
         }
 
@@ -336,7 +373,9 @@ final class LoginItemManager: ObservableObject {
         defaults.set(true, forKey: Self.legacyConfiguredKey)
         markRegistrationCurrent()
         refreshStatus()
-        migrationMessage = "已迁移到 macOS 原生登录项，旧启动代理已卸载。"
+        migrationMessage = L10n.string(
+            "已迁移到 macOS 原生登录项，旧启动代理已卸载。"
+        )
         errorMessage = nil
     }
 
@@ -346,7 +385,9 @@ final class LoginItemManager: ObservableObject {
         case .missing:
             return true
         case .invalid:
-            errorMessage = "发现同名旧启动项但无法安全识别，请在系统设置中手动关闭。"
+            errorMessage = L10n.string(
+                "发现同名旧启动项但无法安全识别，请在系统设置中手动关闭。"
+            )
             return false
         case .valid(let legacyURL):
             return disableValidatedLegacyLaunchAgent(at: legacyURL)
@@ -360,7 +401,10 @@ final class LoginItemManager: ObservableObject {
             "gui/\(getuid())/\(Self.legacyLabel)"
         ])
         guard bootoutResult.status == 0 || legacyStatus != .enabled else {
-            errorMessage = "无法卸载旧启动任务（错误码 \(bootoutResult.status)）。"
+            errorMessage = L10n.string(
+                "无法卸载旧启动任务（错误码 %d）。",
+                bootoutResult.status
+            )
             return false
         }
 
@@ -368,13 +412,22 @@ final class LoginItemManager: ObservableObject {
             try fileManager.removeItem(at: legacyURL)
             return true
         } catch {
-            errorMessage = "无法删除旧启动项：\(error.localizedDescription)"
+            errorMessage = L10n.string("无法删除旧启动项：%@", error.localizedDescription)
             return false
         }
     }
 
     private func refreshStatus() {
         status = service.status
+    }
+
+    private func isLegacyItemError(_ message: String?) -> Bool {
+        guard let message else {
+            return false
+        }
+        return message.localizedCaseInsensitiveContains(L10n.string("旧版启动项"))
+            || message.localizedCaseInsensitiveContains(L10n.string("旧登录项"))
+            || message.localizedCaseInsensitiveContains(L10n.string("旧启动项"))
     }
 
     private var registeredVersion: String? {

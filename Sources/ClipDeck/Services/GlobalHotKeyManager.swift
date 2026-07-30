@@ -42,7 +42,7 @@ final class GlobalHotKeyManager: NSObject, ObservableObject {
     func retry() {
         guard action != nil else {
             registrationState = .notRegistered
-            errorMessage = "主窗口尚未准备好，暂时无法启用全局快捷键。"
+            errorMessage = L10n.string("主窗口尚未准备好，暂时无法启用全局快捷键。")
             return
         }
 
@@ -122,7 +122,10 @@ final class GlobalHotKeyManager: NSObject, ObservableObject {
 
     private func reportFailure(_ status: OSStatus) {
         registrationState = .failed(status)
-        errorMessage = "无法启用全局快捷键（错误码 \(status)）。请检查快捷键冲突后重试。"
+        errorMessage = L10n.string(
+            "无法启用全局快捷键（错误码 %d）。请检查快捷键冲突后重试。",
+            status
+        )
     }
 
     private func removeCarbonRegistration() {

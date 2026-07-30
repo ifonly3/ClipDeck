@@ -24,7 +24,7 @@ struct ClipboardImage {
 
     var dimensionsText: String {
         guard pixelWidth > 0, pixelHeight > 0 else {
-            return "未知尺寸"
+            return L10n.string("未知尺寸")
         }
 
         return "\(pixelWidth)×\(pixelHeight)"
@@ -71,10 +71,12 @@ struct ClipboardItem: Identifiable {
             let normalized = text
                 .split(whereSeparator: { $0.isWhitespace })
                 .joined(separator: " ")
-            preview = normalized.isEmpty ? "空白文本" : normalized.truncated(to: 140)
+            preview = normalized.isEmpty
+                ? L10n.string("空白文本")
+                : normalized.truncated(to: 140)
             searchableText = Self.normalizedSearchText(text)
         case .image(let image):
-            preview = "图片 · \(image.dimensionsText)"
+            preview = L10n.string("图片 · %@", image.dimensionsText)
             searchableText = Self.normalizedSearchText(
                 "图片 图像 image \(image.dimensionsText)"
             )

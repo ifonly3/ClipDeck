@@ -30,8 +30,12 @@ struct ClipDeckApp: App {
         .defaultSize(width: 760, height: 600)
         .windowResizability(.contentMinSize)
         .commands {
-            CommandMenu("剪贴板") {
-                Button(clipboardStore.isMonitoring ? "暂停记录" : "开始记录") {
+            CommandMenu(L10n.string("剪贴板")) {
+                Button(
+                    clipboardStore.isMonitoring
+                        ? L10n.string("暂停记录")
+                        : L10n.string("开始记录")
+                ) {
                     clipboardStore.isMonitoring.toggle()
                 }
                 .keyboardShortcut("r", modifiers: [.command, .option])

@@ -1,0 +1,162 @@
+/* App commands */
+"剪贴板" = "Clipboard";
+"暂停记录" = "Pause Capture";
+"开始记录" = "Start Capture";
+
+/* Clipboard items */
+"未知尺寸" = "Unknown size";
+"空白文本" = "Blank text";
+"图片 · %@" = "Image · %@";
+"文字" = "Text";
+"图片" = "Image";
+"，已复制" = ", copied";
+"历史项目：%@，%@，%@%@" = "Clipboard item: %@, %@, %@%@";
+
+/* Main window */
+"清空所有历史？" = "Clear all history?";
+"清空 1 条历史" = "Clear 1 item";
+"清空 %lld 条历史" = "Clear %lld items";
+"取消" = "Cancel";
+"此操作无法撤销，但不会影响当前系统剪贴板。" = "This cannot be undone, but it will not change the current system clipboard.";
+"正在记录文字与图片" = "Capturing text and images";
+"记录已暂停" = "Capture paused";
+"%@ · 全局唤起 %@" = "%@ · Global shortcut %@";
+"%@ · 全局快捷键不可用" = "%@ · Global shortcut unavailable";
+"剪贴板历史" = "Clipboard History";
+"状态：%@" = "Status: %@";
+"设置" = "Settings";
+"打开 ClipDeck 设置" = "Open ClipDeck Settings";
+"暂停记录新的剪贴板内容" = "Pause capturing new clipboard content";
+"开始记录新的剪贴板内容" = "Start capturing new clipboard content";
+"清空历史" = "Clear History";
+"清空所有历史" = "Clear all history";
+"搜索历史（⌘F）" = "Search history (⌘F)";
+"聚焦搜索历史" = "Focus clipboard history search";
+"搜索历史" = "Search History";
+"搜索剪贴板历史" = "Search clipboard history";
+"输入关键词筛选，按上下方向键选择结果" = "Enter keywords to filter, then use the Up and Down Arrow keys to choose a result";
+"清除搜索" = "Clear Search";
+"上一条（↑）" = "Previous item (↑)";
+"选择上一条历史" = "Select the previous history item";
+"下一条（↓）" = "Next item (↓)";
+"选择下一条历史" = "Select the next history item";
+"复制" = "Copy";
+"删除此条历史（可撤销）" = "Delete this history item (undo available)";
+"删除：%@" = "Delete: %@";
+"删除后可从编辑菜单撤销" = "You can undo this deletion from the Edit menu";
+"复制文字到剪贴板" = "Copy Text to Clipboard";
+"复制图片到剪贴板" = "Copy Image to Clipboard";
+"删除" = "Delete";
+"剪贴板历史列表" = "Clipboard history list";
+"复制失败" = "Copy failed";
+"文字已复制" = "Text copied";
+"图片已复制" = "Image copied";
+"已删除，可从编辑菜单撤销" = "Deleted. You can undo from the Edit menu.";
+"剪贴板历史已清空" = "Clipboard history cleared";
+
+/* Detail and list */
+"已复制" = "Copied";
+"状态：已复制" = "Status: Copied";
+"删除此条历史（Delete，可撤销）" = "Delete this history item (Delete; undo available)";
+"再次复制" = "Copy Again";
+"复制到系统剪贴板（Return）" = "Copy to the system clipboard (Return)";
+"将内容复制到系统剪贴板" = "Copy the content to the system clipboard";
+"文字内容" = "Text content";
+"图片预览，%@" = "Image preview, %@";
+"单击选择 · ↑↓ 切换 · Return 复制 · Delete 删除 · Esc 关闭" = "Click to select · ↑↓ to move · Return to copy · Delete to remove · Esc to close";
+"操作：单击选择，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口" = "Actions: click to select, use the Up and Down Arrow keys to move, press Return to copy, Delete to remove, or Escape to close the window";
+"选择一条历史以预览" = "Select an item to preview";
+"使用 ↑↓ 选择，按 Return 复制。" = "Use ↑↓ to select, then press Return to copy.";
+"选择后按回车，或使用“复制”操作" = "After selecting, press Return or use the Copy action";
+
+/* Empty state */
+"清除关键词并显示全部剪贴板历史" = "Clear the keywords and show all clipboard history";
+"从现在开始记录新复制的文字与图片" = "Start capturing newly copied text and images";
+"没有匹配的历史" = "No Matching History";
+"还没有记录" = "No History Yet";
+"试试其他关键词。" = "Try a different search.";
+"复制文字或图片后，它会出现在这里。" = "Copied text and images will appear here.";
+"开启记录后，ClipDeck 会从那一刻起保存你复制的文字与图片。" = "Turn on capture and ClipDeck will keep text and images copied from that point forward.";
+
+/* Menu bar */
+"最近剪贴板" = "Recent Clipboard";
+"记录" = "Capture";
+"关闭后暂停记录新内容" = "Turn off to pause capturing new content";
+"打开后开始记录新内容" = "Turn on to start capturing new content";
+"全局快捷键不可用" = "Global shortcut unavailable";
+"全局快捷键：%@" = "Global shortcut: %@";
+"复制文字或图片后会显示在这里。" = "Copied text and images will appear here.";
+"开启“记录”后开始保存新的内容。" = "Turn on Capture to start saving new content.";
+"暂无剪贴板历史" = "No clipboard history";
+"复制到系统剪贴板" = "Copy to the system clipboard";
+"最近八条剪贴板历史" = "Eight most recent clipboard history items";
+"打开历史" = "Open History";
+"打开可搜索的完整历史窗口" = "Open the full searchable history window";
+"设置…" = "Settings…";
+"退出 ClipDeck" = "Quit ClipDeck";
+"退出后会清除本次会话的历史" = "Quitting clears this session's history";
+
+/* Settings */
+"记录新的剪贴板内容" = "Capture new clipboard content";
+"暂停只影响之后的新内容；当前会话中已有的历史仍会保留。" = "Pausing only affects new content; existing history remains for this session.";
+"使用体验" = "Behavior";
+"复制后关闭窗口并返回上一个应用" = "Close the window and return to the previous app after copying";
+"只恢复剪贴板，不会自动粘贴，也不需要辅助功能权限。" = "ClipDeck only restores the clipboard. It never pastes automatically and does not require Accessibility permission.";
+"启动" = "Startup";
+"登录时启动 ClipDeck" = "Launch ClipDeck at Login";
+"数据" = "Data";
+"文字和图片都按相同规则记录。历史只存在当前运行会话的内存中，退出 ClipDeck 后自动清空，不会上传。" = "Text and images follow the same capture rules. History stays only in memory for the current session, is cleared when ClipDeck quits, and is never uploaded.";
+"安装到“应用程序”文件夹后可设置登录时启动。" = "Move ClipDeck to the Applications folder to enable launch at login.";
+"需要在系统设置中允许" = "Approval required in System Settings";
+"打开系统设置" = "Open System Settings";
+"重试" = "Retry";
+"已由 macOS 原生登录项管理。" = "Managed by the native macOS login item.";
+"登录时不会自动启动。" = "ClipDeck will not launch automatically at login.";
+
+/* Warnings and errors */
+"再次尝试启用全局快捷键" = "Try enabling the global shortcut again";
+"主窗口尚未准备好，暂时无法启用全局快捷键。" = "The main window is not ready, so the global shortcut cannot be enabled yet.";
+"无法启用全局快捷键（错误码 %d）。请检查快捷键冲突后重试。" = "Could not enable the global shortcut (error %d). Check for a shortcut conflict and try again.";
+"无法删除旧版本地历史；请退出应用后检查 Application Support/ClipDeck。" = "Could not remove legacy local history. Quit the app and check Application Support/ClipDeck.";
+"无法准备这段文字，请稍后再试。" = "Could not prepare this text. Try again shortly.";
+"这张图片暂时无法复制，请重新截取或复制原图。" = "This image cannot be copied right now. Capture it again or copy the original image.";
+"无法写入系统剪切板，请稍后再试。" = "Could not write to the system clipboard. Try again shortly.";
+"删除剪贴板历史" = "Delete Clipboard History";
+"图片处理队列已满，本次未记录。" = "The image processing queue is full, so this item was not captured.";
+"检测到图片，但暂时无法读取；将自动重试。" = "An image was detected but could not be read yet. ClipDeck will retry automatically.";
+"图片连续多次读取失败，本次未记录。" = "The image could not be read after several attempts, so it was not captured.";
+"暂时无法读取剪贴板类型；将自动重试。" = "The clipboard type could not be read yet. ClipDeck will retry automatically.";
+"剪贴板连续多次读取失败，本次未记录。" = "The clipboard could not be read after several attempts, so this item was not captured.";
+"检测到文字，但暂时无法读取；将自动重试。" = "Text was detected but could not be read yet. ClipDeck will retry automatically.";
+"文字连续多次读取失败，本次未记录。" = "The text could not be read after several attempts, so it was not captured.";
+"文字超过 %@，未记录。" = "Text larger than %@ was not captured.";
+"图片处理已取消。" = "Image processing was canceled.";
+"图片原始数据过大，未记录。" = "The original image data is too large and was not captured.";
+"图片超过 32 MB，未记录。" = "Images larger than 32 MB are not captured.";
+"图片尺寸超过 2000 万像素，未记录。" = "Images larger than 20 megapixels are not captured.";
+"检测到图片，但格式无法解析。" = "An image was detected, but its format could not be decoded.";
+"系统已禁止 ClipDeck 读取剪贴板。请在“系统设置 > 隐私与安全性 > 剪贴板”中允许它。" = "macOS has blocked ClipDeck from reading the clipboard. Allow it in System Settings > Privacy & Security > Clipboard.";
+
+/* Login item migration */
+"旧版启动项" = "legacy login item";
+"旧登录项" = "legacy login item";
+"旧启动项" = "legacy login item";
+"请先把 ClipDeck 安装到“应用程序”文件夹，再设置登录时启动。" = "Move ClipDeck to the Applications folder before enabling launch at login.";
+"无法关闭旧版启动项，请在系统设置的登录项中检查 ClipDeck。" = "Could not disable the legacy login item. Check ClipDeck under Login Items in System Settings.";
+"发现同名旧启动项，但内容不符合 ClipDeck 的安全迁移规则；已保留原文件。" = "A legacy login item with the same name was found, but it did not match ClipDeck's safe migration rules. The original file was preserved.";
+"需要在“系统设置 > 通用 > 登录项”中允许 ClipDeck。" = "Allow ClipDeck in System Settings > General > Login Items.";
+"系统没有启用 ClipDeck 登录项，请稍后重试。" = "macOS did not enable the ClipDeck login item. Try again shortly.";
+"无法启用登录时启动：%@" = "Could not enable launch at login: %@";
+"无法关闭登录时启动：%@" = "Could not disable launch at login: %@";
+"更新登录项后系统未确认启用，请重试。" = "macOS did not confirm the updated login item. Try again.";
+"更新登录项失败：%@" = "Could not update the login item: %@";
+"旧登录项仍然保留；%@" = "The legacy login item is still present; %@";
+"原生登录项尚未启用。" = "the native login item is not enabled yet.";
+"无法更新原生登录项。" = "the native login item could not be updated.";
+"旧登录项仍然保留；无法卸载旧启动任务（错误码 %d）。" = "The legacy login item is still present; its launch job could not be unloaded (error %d).";
+"，且旧任务恢复失败（错误码 %d）" = ", and the legacy job could not be restored (error %d)";
+"旧登录项仍然保留；无法完成安全迁移：%@%@" = "The legacy login item is still present; the safe migration could not be completed: %@%@";
+"已迁移到 macOS 原生登录项，旧启动代理已卸载。" = "Migrated to the native macOS login item and unloaded the legacy launch agent.";
+"发现同名旧启动项但无法安全识别，请在系统设置中手动关闭。" = "A legacy login item with the same name could not be safely identified. Disable it manually in System Settings.";
+"无法卸载旧启动任务（错误码 %d）。" = "Could not unload the legacy launch job (error %d).";
+"无法删除旧启动项：%@" = "Could not remove the legacy login item: %@";

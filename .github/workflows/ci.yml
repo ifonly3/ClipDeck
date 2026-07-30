@@ -27,3 +27,16 @@ jobs:
         run: |
           bash -n script/*.sh
           plutil -lint script/ClipDeck-Info.plist
+
+      - name: Package and verify localized app bundle
+        run: |
+          set -euo pipefail
+          PACKAGE_ROOT="$(mktemp -d "${RUNNER_TEMP}/clipdeck-ci-package.XXXXXX")"
+          APP_PATH="${PACKAGE_ROOT}/ClipDeck.app"
+          ./script/package_app.sh release "$APP_PATH"
+          test -x "$APP_PATH/Contents/MacOS/ClipDeck"
+          test -f "$APP_PATH/Contents/Resources/ClipDeck_ClipDeck.bundle/en.lproj/Localizable.strings"
+          test -f "$APP_PATH/Contents/Resources/ClipDeck_ClipDeck.bundle/zh-hans.lproj/Localizable.strings"
+          test -f "$APP_PATH/Contents/Resources/en.lproj/InfoPlist.strings"
+          test -f "$APP_PATH/Contents/Resources/zh-Hans.lproj/InfoPlist.strings"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
