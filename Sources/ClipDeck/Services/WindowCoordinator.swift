@@ -27,6 +27,8 @@ final class WindowCoordinator: ObservableObject {
     }
 
     @Published private(set) var previousApplicationName: String?
+    private(set) var requestedItemID: ClipboardItem.ID?
+    private(set) var presentationID = UUID()
 
     private let defaults: UserDefaults
     private var previousApplication: NSRunningApplication?
@@ -43,8 +45,9 @@ final class WindowCoordinator: ObservableObject {
     }
 
     /// Records the app the user came from, then presents the existing SwiftUI window.
-    func presentMainWindow(open: () -> Void) {
-        forgetPreviousApplication()
+    func presentMainWindow(selecting itemID: ClipboardItem.ID? = nil, open: () -> Void) {
+        presentationID = UUID()
+        requestedItemID = itemID
         rememberFrontmostApplication()
         open()
         NSApp.activate(ignoringOtherApps: true)
@@ -91,6 +94,11 @@ final class WindowCoordinator: ObservableObject {
         previousApplicationName = nil
     }
 
+    func takeRequestedItemID() -> ClipboardItem.ID? {
+        defer { requestedItemID = nil }
+        return requestedItemID
+    }
+
     static func isMainWindow(_ window: NSWindow?) -> Bool {
         guard let window, !(window is NSPanel) else {
             return false
@@ -102,7 +110,7 @@ final class WindowCoordinator: ObservableObject {
         NSApp.windows.first(where: { isMainWindow($0) })
     }
 
-    private func rememberFrontmostApplication() {
+    func rememberFrontmostApplication() {
         guard let candidate = NSWorkspace.shared.frontmostApplication,
               candidate.processIdentifier != ProcessInfo.processInfo.processIdentifier,
               candidate.bundleIdentifier != Bundle.main.bundleIdentifier else {

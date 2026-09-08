@@ -24,7 +24,7 @@ struct EmptyStateView: View {
                     .accessibilityHint(L10n.string("清除关键词并显示全部剪贴板历史"))
             } else if !isMonitoring {
                 Button(L10n.string("开始记录"), action: onStartMonitoring)
-                    .accessibilityHint(L10n.string("从现在开始记录新复制的文字与图片"))
+                    .accessibilityHint(L10n.string("从现在开始记录新复制的文字、图片与文件"))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -44,8 +44,8 @@ struct EmptyStateView: View {
             return L10n.string("试试其他关键词。")
         }
         if isMonitoring {
-            return L10n.string("复制文字或图片后，它会出现在这里。")
+            return L10n.string("复制文字、图片或文件后，它会出现在这里。")
         }
-        return L10n.string("开启记录后，ClipDeck 会从那一刻起保存你复制的文字与图片。")
+        return L10n.string("开启记录后，ClipDeck 会从那一刻起保存你复制的文字、图片与文件引用。")
     }
 }

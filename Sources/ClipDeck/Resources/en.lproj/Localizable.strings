@@ -1,5 +1,31 @@
 /* App commands */
 "剪贴板" = "Clipboard";
+"开发版本" = "Development build";
+"版本 %@" = "Version %@";
+"版本 %@（构建 %@）" = "Version %@ (build %@)";
+"已删除" = "Deleted";
+"部分内容超过历史内存上限，已保留可容纳的项目。" = "Some content exceeds the history memory limit. Items that fit have been saved.";
+"一次复制的项目超过 %lld 个，本次未记录。" = "More than %lld items were copied at once; this event was not saved.";
+"此条目已删除，因内容过大无法撤销。" = "Item deleted. It is too large to keep for undo.";
+"图片暂不可读取，已保留可读取的文字。" = "The image is temporarily unreadable. Available text has been saved.";
+"部分格式无法读取或超过限制，已保留可读取的内容。" = "Some formats could not be read or exceeded the limits. Available content has been saved.";
+"剪贴板内容超过容量限制，本次未完整记录。" = "The clipboard exceeds the size limits and was not fully captured.";
+"此类剪贴板内容暂不支持，系统剪贴板中的原内容仍可正常粘贴。" = "This clipboard format is not supported yet. The original clipboard content can still be pasted.";
+"图片无法解析，已保留可读取的文字和文字格式。" = "The image could not be decoded. Available text and text formats have been saved.";
+"此条目超过历史内存上限，未记录。" = "This item exceeds the history memory limit and was not saved.";
+"%@ 等 %lld 个文件" = "%@ · %lld files";
+"组合内容 · %lld 项" = "Grouped content · %lld items";
+"组合内容" = "Grouped content";
+"复制完整内容到剪贴板" = "Copy full content to clipboard";
+"完整内容已复制" = "Full content copied";
+"空白文本 · %lld 个字符" = "Whitespace · %lld characters";
+"支持文字、富文本、链接、图片、PDF 和文件引用；同次复制的多项内容一起保存。文件本体不会读入；历史只存在内存中，退出后清空，不会上传。不支持或超限的内容会明确提示。" = "Captures text, rich text, links, images, PDFs, and file references. Items copied together stay grouped. Files are not read. History stays in memory, clears on quit, and is never uploaded. Unsupported or oversized content is reported.";
+"已保留格式；下方显示文字预览。" = "Formatting is preserved; a text preview is shown below.";
+"复制为纯文本" = "Copy as Plain Text";
+"一次复制 · %lld 项" = "One copy · %lld items";
+"第 %lld 项" = "Item %lld";
+"查看完整内容" = "View full content";
+"查看详情：%@" = "View details: %@";
 "暂停记录" = "Pause Capture";
 "开始记录" = "Start Capture";
 
@@ -7,8 +33,11 @@
 "未知尺寸" = "Unknown size";
 "空白文本" = "Blank text";
 "图片 · %@" = "Image · %@";
+"文件夹 · %@" = "Folder · %@";
+"文件 · %@" = "File · %@";
 "文字" = "Text";
 "图片" = "Image";
+"文件" = "Files";
 "，已复制" = ", copied";
 "历史项目：%@，%@，%@%@" = "Clipboard item: %@, %@, %@%@";
 
@@ -18,7 +47,7 @@
 "清空 %lld 条历史" = "Clear %lld items";
 "取消" = "Cancel";
 "此操作无法撤销，但不会影响当前系统剪贴板。" = "This cannot be undone, but it will not change the current system clipboard.";
-"正在记录文字与图片" = "Capturing text and images";
+"正在记录文字、图片与文件" = "Capturing text, images, and files";
 "记录已暂停" = "Capture paused";
 "%@ · 全局唤起 %@" = "%@ · Global shortcut %@";
 "%@ · 全局快捷键不可用" = "%@ · Global shortcut unavailable";
@@ -46,11 +75,13 @@
 "删除后可从编辑菜单撤销" = "You can undo this deletion from the Edit menu";
 "复制文字到剪贴板" = "Copy Text to Clipboard";
 "复制图片到剪贴板" = "Copy Image to Clipboard";
+"复制文件到剪贴板" = "Copy Files to Clipboard";
 "删除" = "Delete";
 "剪贴板历史列表" = "Clipboard history list";
 "复制失败" = "Copy failed";
 "文字已复制" = "Text copied";
 "图片已复制" = "Image copied";
+"文件已复制" = "Files copied";
 "已删除，可从编辑菜单撤销" = "Deleted. You can undo from the Edit menu.";
 "剪贴板历史已清空" = "Clipboard history cleared";
 
@@ -63,6 +94,7 @@
 "将内容复制到系统剪贴板" = "Copy the content to the system clipboard";
 "文字内容" = "Text content";
 "图片预览，%@" = "Image preview, %@";
+"文件列表，共 %lld 项" = "File list with %lld items";
 "单击选择 · ↑↓ 切换 · Return 复制 · Delete 删除 · Esc 关闭" = "Click to select · ↑↓ to move · Return to copy · Delete to remove · Esc to close";
 "操作：单击选择，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口" = "Actions: click to select, use the Up and Down Arrow keys to move, press Return to copy, Delete to remove, or Escape to close the window";
 "选择一条历史以预览" = "Select an item to preview";
@@ -71,12 +103,12 @@
 
 /* Empty state */
 "清除关键词并显示全部剪贴板历史" = "Clear the keywords and show all clipboard history";
-"从现在开始记录新复制的文字与图片" = "Start capturing newly copied text and images";
+"从现在开始记录新复制的文字、图片与文件" = "Start capturing newly copied text, images, and files";
 "没有匹配的历史" = "No Matching History";
 "还没有记录" = "No History Yet";
 "试试其他关键词。" = "Try a different search.";
-"复制文字或图片后，它会出现在这里。" = "Copied text and images will appear here.";
-"开启记录后，ClipDeck 会从那一刻起保存你复制的文字与图片。" = "Turn on capture and ClipDeck will keep text and images copied from that point forward.";
+"复制文字、图片或文件后，它会出现在这里。" = "Copied text, images, and files will appear here.";
+"开启记录后，ClipDeck 会从那一刻起保存你复制的文字、图片与文件引用。" = "Turn on capture and ClipDeck will keep copied text, images, and file references from that point forward.";
 
 /* Menu bar */
 "最近剪贴板" = "Recent Clipboard";
@@ -85,7 +117,7 @@
 "打开后开始记录新内容" = "Turn on to start capturing new content";
 "全局快捷键不可用" = "Global shortcut unavailable";
 "全局快捷键：%@" = "Global shortcut: %@";
-"复制文字或图片后会显示在这里。" = "Copied text and images will appear here.";
+"复制文字、图片或文件后会显示在这里。" = "Copied text, images, and files will appear here.";
 "开启“记录”后开始保存新的内容。" = "Turn on Capture to start saving new content.";
 "暂无剪贴板历史" = "No clipboard history";
 "复制到系统剪贴板" = "Copy to the system clipboard";
@@ -101,11 +133,12 @@
 "暂停只影响之后的新内容；当前会话中已有的历史仍会保留。" = "Pausing only affects new content; existing history remains for this session.";
 "使用体验" = "Behavior";
 "复制后关闭窗口并返回上一个应用" = "Close the window and return to the previous app after copying";
-"只恢复剪贴板，不会自动粘贴，也不需要辅助功能权限。" = "ClipDeck only restores the clipboard. It never pastes automatically and does not require Accessibility permission.";
+"监听和清空历史不会更改当前剪贴板；从历史复制会替换当前内容，但不会自动粘贴，也不需要辅助功能权限。" = "Monitoring and clearing history do not change the current clipboard. Copying a history item replaces it, but ClipDeck never pastes automatically and does not require Accessibility permission.";
+"系统截图" = "System Screenshots";
+"按 ⌃⇧⌘4 将选区截图复制到剪贴板，按 ⌃⇧⌘3 复制全屏；ClipDeck 会自动记录。若要长期启用，请按 ⇧⌘5，并在“选项 > 存储到”中选择“剪贴板”。" = "Press ⌃⇧⌘4 to copy a selected area or ⌃⇧⌘3 to copy the full screen; ClipDeck captures it automatically. To make this the default, press ⇧⌘5 and choose Clipboard under Options > Save to.";
 "启动" = "Startup";
 "登录时启动 ClipDeck" = "Launch ClipDeck at Login";
 "数据" = "Data";
-"文字和图片都按相同规则记录。历史只存在当前运行会话的内存中，退出 ClipDeck 后自动清空，不会上传。" = "Text and images follow the same capture rules. History stays only in memory for the current session, is cleared when ClipDeck quits, and is never uploaded.";
 "安装到“应用程序”文件夹后可设置登录时启动。" = "Move ClipDeck to the Applications folder to enable launch at login.";
 "需要在系统设置中允许" = "Approval required in System Settings";
 "打开系统设置" = "Open System Settings";
@@ -120,9 +153,16 @@
 "无法删除旧版本地历史；请退出应用后检查 Application Support/ClipDeck。" = "Could not remove legacy local history. Quit the app and check Application Support/ClipDeck.";
 "无法准备这段文字，请稍后再试。" = "Could not prepare this text. Try again shortly.";
 "这张图片暂时无法复制，请重新截取或复制原图。" = "This image cannot be copied right now. Capture it again or copy the original image.";
-"无法写入系统剪切板，请稍后再试。" = "Could not write to the system clipboard. Try again shortly.";
+"无法准备剪贴板内容，当前系统剪贴板未更改。" = "Could not prepare the clipboard content. The current system clipboard was not changed.";
+"无法写入系统剪贴板，已恢复之前的内容。" = "Could not write to the system clipboard, so the previous contents were restored.";
+"无法写入系统剪贴板，也无法完整恢复之前的内容。" = "Could not write to the system clipboard or fully restore its previous contents.";
+"系统剪贴板刚刚发生变化，未覆盖新内容；请重试。" = "The system clipboard changed just now, so its new contents were not replaced. Try again.";
+"“%@”不存在或暂不可用，未更改系统剪贴板。" = "“%@” is missing or unavailable. The system clipboard was not changed.";
+"%lld 个文件不存在或暂不可用，未更改系统剪贴板。" = "%lld files are missing or unavailable. The system clipboard was not changed.";
 "删除剪贴板历史" = "Delete Clipboard History";
 "图片处理队列已满，本次未记录。" = "The image processing queue is full, so this item was not captured.";
+"图片处理队列内存已满，本次未记录。" = "The image processing queue reached its memory limit, so this item was not captured.";
+"图片剪贴板数据超过 %@，本次未记录。" = "Clipboard image data larger than %@ was not captured.";
 "检测到图片，但暂时无法读取；将自动重试。" = "An image was detected but could not be read yet. ClipDeck will retry automatically.";
 "图片连续多次读取失败，本次未记录。" = "The image could not be read after several attempts, so it was not captured.";
 "暂时无法读取剪贴板类型；将自动重试。" = "The clipboard type could not be read yet. ClipDeck will retry automatically.";
@@ -130,10 +170,14 @@
 "检测到文字，但暂时无法读取；将自动重试。" = "Text was detected but could not be read yet. ClipDeck will retry automatically.";
 "文字连续多次读取失败，本次未记录。" = "The text could not be read after several attempts, so it was not captured.";
 "文字超过 %@，未记录。" = "Text larger than %@ was not captured.";
+"检测到文件，但暂时无法读取；将自动重试。" = "Files were detected but could not be read yet. ClipDeck will retry automatically.";
+"文件连续多次读取失败，本次未记录。" = "The files could not be read after several attempts, so this item was not captured.";
+"一次复制的文件超过 %lld 个，本次未记录。" = "A copied group with more than %lld files was not captured.";
 "图片处理已取消。" = "Image processing was canceled.";
 "图片原始数据过大，未记录。" = "The original image data is too large and was not captured.";
 "图片超过 32 MB，未记录。" = "Images larger than 32 MB are not captured.";
-"图片尺寸超过 2000 万像素，未记录。" = "Images larger than 20 megapixels are not captured.";
+"图片尺寸超过 1600 万像素，未记录。" = "Images larger than 16 megapixels are not captured.";
+"图片无法生成通用剪贴板格式，未记录。" = "The image could not be converted to a broadly compatible clipboard format, so it was not captured.";
 "检测到图片，但格式无法解析。" = "An image was detected, but its format could not be decoded.";
 "系统已禁止 ClipDeck 读取剪贴板。请在“系统设置 > 隐私与安全性 > 剪贴板”中允许它。" = "macOS has blocked ClipDeck from reading the clipboard. Allow it in System Settings > Privacy & Security > Clipboard.";
 

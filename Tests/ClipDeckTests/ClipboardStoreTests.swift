@@ -208,15 +208,15 @@ func aNewClipboardChangeWaitsForThePendingImageInsteadOfCancellingIt() async thr
 func imageHistoryByteBudgetKeepsTheNewestImageThatFits() throws {
     let defaults = try enabledDefaults()
     defer { defaults.defaults.removePersistentDomain(forName: defaults.suiteName) }
+    let thumbnailData = try makePNG(width: 2, height: 2)
     let store = ClipboardStore(
         pasteboard: isolatedPasteboard(),
         startsMonitoring: false,
         performsLegacyCleanup: false,
         userDefaults: defaults.defaults,
         monitoringDefaultsKey: "monitoring",
-        configuration: .init(maximumImageHistoryBytes: 5)
+        configuration: .init(maximumImageHistoryBytes: 5 + thumbnailData.count)
     )
-    let thumbnailData = try makePNG(width: 2, height: 2)
     let olderImage = try makeClipboardImage(
         data: Data(repeating: 1, count: 4),
         fingerprint: Data([1]),
@@ -358,6 +358,50 @@ func multipleObservedImagesQueueWhileTheFirstImageIsSlow() async throws {
 
     #expect(store.items.count == 3)
     #expect(Set(store.items.compactMap { $0.image?.data.first }) == Set([1, 2, 3]))
+}
+
+@Test @MainActor
+func cancelledImageCaptureKeepsItsMemoryReservedUntilTheTaskEnds() async throws {
+    let thumbnailData = try makePNG(width: 3, height: 3)
+    let processor = FirstCallGatedImageProcessor(thumbnailData: thumbnailData)
+    let pasteboard = isolatedPasteboard()
+    let defaults = try enabledDefaults()
+    defer { defaults.defaults.removePersistentDomain(forName: defaults.suiteName) }
+    let store = ClipboardStore(
+        pasteboard: pasteboard,
+        startsMonitoring: false,
+        performsLegacyCleanup: false,
+        userDefaults: defaults.defaults,
+        monitoringDefaultsKey: "monitoring",
+        imageProcessor: processor,
+        configuration: .init(maximumPendingImageCaptureBytes: 1)
+    )
+
+    pasteboard.clearContents()
+    #expect(pasteboard.setData(Data([1]), forType: .png))
+    store.pollPasteboard()
+    await processor.waitUntilFirstCallStarted()
+
+    store.clearHistory()
+    pasteboard.clearContents()
+    #expect(pasteboard.setData(Data([2]), forType: .png))
+    store.pollPasteboard()
+
+    #expect(store.items.isEmpty)
+    #expect(
+        store.captureWarning
+            == L10n.string("图片处理队列内存已满，本次未记录。")
+    )
+
+    await processor.releaseFirstCall()
+    await store.waitForPendingImageCapture()
+
+    pasteboard.clearContents()
+    #expect(pasteboard.setData(Data([3]), forType: .png))
+    store.pollPasteboard()
+    await store.waitForPendingImageCapture()
+
+    #expect(store.items.first?.image?.data == Data([3]))
 }
 
 @Test

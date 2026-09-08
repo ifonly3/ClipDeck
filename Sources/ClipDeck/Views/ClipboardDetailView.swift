@@ -5,12 +5,38 @@ struct ClipboardDetailView: View {
     let isCopied: Bool
     let onCopy: () -> Void
     let onDelete: () -> Void
+    var onCopyPlainText: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
 
             Divider()
+
+            if let captureNote = item.captureNote {
+                Label(captureNote, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 10)
+            }
+
+            if item.hasRichText {
+                HStack {
+                    Text(L10n.string("已保留格式；下方显示文字预览。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if let onCopyPlainText {
+                        Button(L10n.string("复制为纯文本"), action: onCopyPlainText)
+                            .buttonStyle(.link)
+                            .font(.caption)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+            }
 
             preview
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -25,8 +51,8 @@ struct ClipboardDetailView: View {
     private var header: some View {
         HStack(spacing: 10) {
             Label(
-                item.image == nil ? L10n.string("文字") : L10n.string("图片"),
-                systemImage: item.image == nil ? "doc.text" : "photo"
+                item.localizedContentType,
+                systemImage: item.systemImageName
             )
             .font(.headline)
 
@@ -64,36 +90,28 @@ struct ClipboardDetailView: View {
 
     @ViewBuilder
     private var preview: some View {
-        switch item.content {
-        case .text(let text):
+        if item.isMultiPart {
             ScrollView {
-                Text(verbatim: text)
-                    .font(.body)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    Text(L10n.string("一次复制 · %lld 项", Int64(item.parts.count)))
+                        .font(.headline)
+                    ForEach(Array(item.parts.enumerated()), id: \.offset) { index, part in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(L10n.string("第 %lld 项", Int64(index + 1)))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            ClipboardPartPreview(content: part)
+                        }
+                        if index < item.parts.count - 1 { Divider() }
+                    }
+                }
+                .padding(18)
+            }
+        } else {
+            ScrollView {
+                ClipboardPartPreview(content: item.content)
                     .padding(18)
             }
-            .accessibilityLabel(L10n.string("文字内容"))
-
-        case .image(let image):
-            VStack(spacing: 14) {
-                Spacer(minLength: 16)
-
-                Image(nsImage: image.thumbnail)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(maxWidth: 420, maxHeight: 320)
-                    .accessibilityLabel(L10n.string("图片预览，%@", image.dimensionsText))
-
-                Text(image.dimensionsText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 16)
-            }
-            .padding(.horizontal, 18)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

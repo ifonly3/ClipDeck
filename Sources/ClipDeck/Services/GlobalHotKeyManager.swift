@@ -25,9 +25,16 @@ final class GlobalHotKeyManager: NSObject, ObservableObject {
     nonisolated(unsafe) private var eventHandler: EventHandlerRef?
     nonisolated(unsafe) private var hotKey: EventHotKeyRef?
     private var action: (() -> Void)?
+    private let enablesSystemRegistration: Bool
+
+    init(enablesSystemRegistration: Bool = true) {
+        self.enablesSystemRegistration = enablesSystemRegistration
+        super.init()
+    }
 
     func register(action: @escaping () -> Void) {
         self.action = action
+        guard enablesSystemRegistration else { return }
 
         guard hotKey == nil else {
             registrationState = .registered
@@ -40,6 +47,7 @@ final class GlobalHotKeyManager: NSObject, ObservableObject {
 
     /// Re-attempts registration after a shortcut collision or transient Carbon error.
     func retry() {
+        guard enablesSystemRegistration else { return }
         guard action != nil else {
             registrationState = .notRegistered
             errorMessage = L10n.string("主窗口尚未准备好，暂时无法启用全局快捷键。")

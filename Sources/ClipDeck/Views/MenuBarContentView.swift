@@ -9,6 +9,8 @@ struct MenuBarContentView: View {
     @ObservedObject var hotKeyManager: GlobalHotKeyManager
     @State private var hoveredItemID: ClipboardItem.ID?
 
+    private let rowHeight: CGFloat = 48
+
     private var recentItems: [ClipboardItem] {
         Array(store.items.prefix(8))
     }
@@ -35,6 +37,7 @@ struct MenuBarContentView: View {
         .padding(14)
         .frame(width: 360)
         .onAppear {
+            windowCoordinator.rememberFrontmostApplication()
             store.startMonitoring()
             registerHotKey()
         }
@@ -83,7 +86,7 @@ struct MenuBarContentView: View {
         if recentItems.isEmpty {
             Text(
                 store.isMonitoring
-                    ? L10n.string("复制文字或图片后会显示在这里。")
+                    ? L10n.string("复制文字、图片或文件后会显示在这里。")
                     : L10n.string("开启“记录”后开始保存新的内容。")
             )
                 .font(.caption)
@@ -97,10 +100,27 @@ struct MenuBarContentView: View {
                 )
         } else {
             ScrollView {
-                LazyVStack(spacing: 2) {
+                VStack(spacing: 2) {
                     ForEach(recentItems) { item in
-                        recentItemButton(for: item)
-                        .buttonStyle(.plain)
+                        HStack(spacing: 2) {
+                            recentItemButton(for: item)
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(menuAccessibilityLabel(for: item))
+                                .accessibilityHint(L10n.string("复制到系统剪贴板"))
+
+                            Button {
+                                openHistory(selecting: item.id)
+                            } label: {
+                                Image(systemName: "arrow.up.right.square")
+                                    .frame(width: 26, height: 32)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .help(L10n.string("查看完整内容"))
+                            .accessibilityLabel(L10n.string("查看详情：%@", item.preview))
+                        }
+                        .frame(height: rowHeight)
                         .background {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .fill(
@@ -112,12 +132,22 @@ struct MenuBarContentView: View {
                         .onHover { isHovering in
                             hoveredItemID = isHovering ? item.id : nil
                         }
-                        .accessibilityLabel(menuAccessibilityLabel(for: item))
-                        .accessibilityHint(L10n.string("复制到系统剪贴板"))
+                        .contextMenu {
+                            Button(L10n.string("查看完整内容")) {
+                                openHistory(selecting: item.id)
+                            }
+                            if item.hasRichText {
+                                Button(L10n.string("复制为纯文本")) {
+                                    copy(item, plainTextOnly: true)
+                                }
+                            }
+                        }
                     }
                 }
             }
-            .frame(maxHeight: 270)
+            // A menu-bar window may ask for its minimum fitting size. An upper
+            // bound alone allows ScrollView to collapse to zero height.
+            .frame(height: min(270, CGFloat(recentItems.count) * (rowHeight + 2) - 2))
             .accessibilityLabel(L10n.string("最近八条剪贴板历史"))
         }
     }
@@ -164,6 +194,11 @@ struct MenuBarContentView: View {
                     .foregroundStyle(.tint)
                     .accessibilityHidden(true)
             }
+            if let captureNote = item.captureNote {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+                    .help(captureNote)
+            }
         }
         .contentShape(Rectangle())
         .padding(.horizontal, 7)
@@ -190,8 +225,25 @@ struct MenuBarContentView: View {
             }
             .frame(width: 38, height: 28)
             .accessibilityHidden(true)
+        } else if let files = item.files, let firstFile = files.references.first {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: firstFile.systemImageName)
+                    .font(.system(size: 20))
+                    .foregroundStyle(.secondary)
+
+                if files.references.count > 1 {
+                    Text("\(files.references.count)")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(.tint, in: Capsule())
+                }
+            }
+            .frame(width: 38, height: 28)
+            .accessibilityHidden(true)
         } else {
-            Image(systemName: "doc.text")
+            Image(systemName: item.systemImageName)
                 .foregroundStyle(.secondary)
                 .frame(width: 38)
                 .accessibilityHidden(true)
@@ -199,36 +251,35 @@ struct MenuBarContentView: View {
     }
 
     private func menuAccessibilityLabel(for item: ClipboardItem) -> String {
-        let contentType = item.image == nil ? L10n.string("文字") : L10n.string("图片")
         let copiedStatus = store.lastCopiedItemID == item.id
             ? L10n.string("，已复制")
             : ""
-        return L10n.string(
+        let label = L10n.string(
             "历史项目：%@，%@，%@%@",
-            contentType,
+            item.localizedContentType,
             item.preview,
             item.timestampText,
             copiedStatus
         )
+        return item.captureNote.map { label + "，" + $0 } ?? label
     }
 
-    private func copy(_ item: ClipboardItem) {
-        guard store.copy(item) else {
+    private func copy(_ item: ClipboardItem, plainTextOnly: Bool = false) {
+        guard store.copy(item, plainTextOnly: plainTextOnly) else {
             announce(L10n.string("复制失败"))
             return
         }
-        announce(
-            item.image == nil
-                ? L10n.string("文字已复制")
-                : L10n.string("图片已复制")
-        )
-        dismiss()
+        announce(plainTextOnly ? L10n.string("文字已复制") : item.localizedCopiedAnnouncement)
+        if windowCoordinator.closesWindowAfterCopy {
+            dismiss()
+            windowCoordinator.returnToPreviousApplicationIfNeeded()
+        }
     }
 
-    private func openHistory() {
+    private func openHistory(selecting itemID: ClipboardItem.ID? = nil) {
         dismiss()
         DispatchQueue.main.async {
-            windowCoordinator.presentMainWindow {
+            windowCoordinator.presentMainWindow(selecting: itemID) {
                 openWindow(id: "main")
             }
         }

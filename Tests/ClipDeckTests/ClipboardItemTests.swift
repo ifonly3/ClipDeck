@@ -73,6 +73,7 @@ func imageClipboardContentCanBeCapturedSearchedAndCopiedBack() async throws {
     store.copy(item)
 
     #expect(pasteboard.data(forType: image.pasteboardType) == image.data)
+    #expect(pasteboard.string(forType: .string) == "同一次复制附带的文字")
     let copiedImage = try #require(NSImage(pasteboard: pasteboard))
     #expect(Int(copiedImage.size.width.rounded()) == 96)
     #expect(Int(copiedImage.size.height.rounded()) == 54)

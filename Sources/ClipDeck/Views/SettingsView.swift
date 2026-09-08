@@ -22,9 +22,24 @@ struct SettingsView: View {
                     isOn: $windowCoordinator.closesWindowAfterCopy
                 )
 
-                Text(L10n.string("只恢复剪贴板，不会自动粘贴，也不需要辅助功能权限。"))
+                Text(
+                    L10n.string(
+                        "监听和清空历史不会更改当前剪贴板；从历史复制会替换当前内容，但不会自动粘贴，也不需要辅助功能权限。"
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section(L10n.string("系统截图")) {
+                Text(
+                    L10n.string(
+                        "按 ⌃⇧⌘4 将选区截图复制到剪贴板，按 ⌃⇧⌘3 复制全屏；ClipDeck 会自动记录。若要长期启用，请按 ⇧⌘5，并在“选项 > 存储到”中选择“剪贴板”。"
+                    )
+                )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section(L10n.string("启动")) {
@@ -37,7 +52,7 @@ struct SettingsView: View {
             Section(L10n.string("数据")) {
                 Text(
                     L10n.string(
-                        "文字和图片都按相同规则记录。历史只存在当前运行会话的内存中，退出 ClipDeck 后自动清空，不会上传。"
+                        "支持文字、富文本、链接、图片、PDF 和文件引用；同次复制的多项内容一起保存。文件本体不会读入；历史只存在内存中，退出后清空，不会上传。不支持或超限的内容会明确提示。"
                     )
                 )
                     .font(.caption)
@@ -46,10 +61,26 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                HStack {
+                    Text("ClipDeck")
+                    Spacer()
+                    Text(AppVersion.current.displayText)
+                        .monospacedDigit()
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 20)
+                .frame(height: 39)
+            }
+            .background(.bar)
+        }
         // Keep every section visible at the default size in both supported
         // languages. English explanatory copy needs more vertical space than
         // Chinese, and a clipped privacy section is easy to miss in Settings.
-        .frame(width: 500, height: 500)
+        .frame(width: 500, height: 690)
         .onAppear {
             loginItemManager.refresh()
         }

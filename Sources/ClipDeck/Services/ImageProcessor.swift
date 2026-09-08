@@ -1,7 +1,14 @@
 import CryptoKit
+import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
+
+enum ClipboardImageSafetyLimits {
+    static let maximumFinalBytes = 32 * 1024 * 1024
+    static let maximumDimension = 12_000
+    static let maximumPixelCount: Int64 = 16_000_000
+}
 
 struct ImageProcessingCandidate: Sendable {
     let typeIdentifier: String
@@ -15,6 +22,28 @@ struct ProcessedClipboardImage: Sendable {
     let pixelHeight: Int
     let fingerprint: Data
     let thumbnailData: Data
+    let previewData: Data?
+    let additionalRepresentations: [String: Data]
+
+    init(
+        data: Data,
+        typeIdentifier: String,
+        pixelWidth: Int,
+        pixelHeight: Int,
+        fingerprint: Data,
+        thumbnailData: Data,
+        previewData: Data? = nil,
+        additionalRepresentations: [String: Data] = [:]
+    ) {
+        self.data = data
+        self.typeIdentifier = typeIdentifier
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+        self.fingerprint = fingerprint
+        self.thumbnailData = thumbnailData
+        self.previewData = previewData
+        self.additionalRepresentations = additionalRepresentations
+    }
 }
 
 enum ImageProcessingFailure: Error, Equatable, Sendable {
@@ -24,6 +53,7 @@ enum ImageProcessingFailure: Error, Equatable, Sendable {
     case invalidFormat
     case dimensionsTooLarge
     case thumbnailCreationFailed
+    case compatibilityEncodingFailed
 }
 
 enum ImageProcessingOutcome: Sendable {
@@ -39,11 +69,18 @@ protocol ImageProcessing: Sendable {
 actor ImageProcessor: ImageProcessing {
     struct Configuration: Sendable {
         var maximumRawBytes = 96 * 1024 * 1024
-        var maximumFinalBytes = 32 * 1024 * 1024
-        var maximumDimension = 12_000
-        var maximumPixelCount: Int64 = 20_000_000
+        var maximumFinalBytes = ClipboardImageSafetyLimits.maximumFinalBytes
+        var maximumDimension = ClipboardImageSafetyLimits.maximumDimension
+        var maximumPixelCount = ClipboardImageSafetyLimits.maximumPixelCount
         var thumbnailMaximumDimension = 320
+        var previewMaximumDimension = 960
+        var maximumPreviewBytes = 4 * 1024 * 1024
+        var pdfMaximumRenderDimension = 2_048
         var tiffNormalizationThresholdBytes = 8 * 1024 * 1024
+        var maximumCompatibilityBytes = 72 * 1024 * 1024
+        var maximumCompatibilityDecodedBytes = 64 * 1024 * 1024
+        var maximumOptionalPNGDecodedBytes = 16 * 1024 * 1024
+        var maximumOptionalPNGBytes = 16 * 1024 * 1024
 
         static let `default` = Configuration()
     }
@@ -73,6 +110,10 @@ actor ImageProcessor: ImageProcessing {
         }
         guard candidate.data.count <= configuration.maximumRawBytes else {
             return .failure(.rawDataTooLarge)
+        }
+
+        if UTType(candidate.typeIdentifier)?.conforms(to: .pdf) == true {
+            return processPDF(candidate, configuration: configuration)
         }
 
         let sourceOptions = [
@@ -112,6 +153,7 @@ actor ImageProcessor: ImageProcessing {
         ) else {
             return .failure(.thumbnailCreationFailed)
         }
+        let previewData = makePreviewData(from: source, configuration: configuration)
 
         guard !Task.isCancelled else {
             return .failure(.cancelled)
@@ -133,6 +175,39 @@ actor ImageProcessor: ImageProcessing {
             return .failure(.cancelled)
         }
 
+        var additionalRepresentations: [String: Data] = [:]
+        let decodedByteEstimate = Int64(dimensions.width)
+            * Int64(dimensions.height)
+            * 4
+        let normalizedType = UTType(normalized.typeIdentifier)
+        let alreadyHasCompatibleRepresentation = normalizedType?.conforms(to: .png) == true
+            || normalizedType?.conforms(to: .tiff) == true
+        if !alreadyHasCompatibleRepresentation {
+            guard decodedByteEstimate
+                    <= Int64(configuration.maximumCompatibilityDecodedBytes),
+                  let compatibilityImage = makeOrientedImage(from: source),
+                  let tiffData = makeEncodedData(
+                      from: compatibilityImage,
+                      typeIdentifier: UTType.tiff.identifier
+                  ),
+                  tiffData.count <= configuration.maximumCompatibilityBytes else {
+                return .failure(.compatibilityEncodingFailed)
+            }
+            additionalRepresentations[UTType.tiff.identifier] = tiffData
+
+            if normalized.typeIdentifier != UTType.png.identifier,
+               decodedByteEstimate
+                    <= Int64(configuration.maximumOptionalPNGDecodedBytes),
+               let pngData = makeEncodedData(
+                   from: compatibilityImage,
+                   typeIdentifier: UTType.png.identifier
+               ),
+               pngData.count <= configuration.maximumOptionalPNGBytes {
+                additionalRepresentations[UTType.png.identifier] = pngData
+            }
+        }
+
+        guard !Task.isCancelled else { return .failure(.cancelled) }
         let digest = Data(SHA256.hash(data: normalized.data))
         return .success(
             ProcessedClipboardImage(
@@ -141,7 +216,9 @@ actor ImageProcessor: ImageProcessing {
                 pixelWidth: dimensions.width,
                 pixelHeight: dimensions.height,
                 fingerprint: digest,
-                thumbnailData: thumbnailData
+                thumbnailData: thumbnailData,
+                previewData: previewData,
+                additionalRepresentations: additionalRepresentations
             )
         )
     }
@@ -158,7 +235,8 @@ actor ImageProcessor: ImageProcessing {
             return nil
         }
 
-        return (width, height)
+        let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
+        return (5...8).contains(orientation) ? (height, width) : (width, height)
     }
 
     private nonisolated static func makeThumbnailData(
@@ -179,22 +257,37 @@ actor ImageProcessor: ImageProcessing {
             return nil
         }
 
-        let output = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(
-            output,
-            UTType.png.identifier as CFString,
-            1,
-            nil
-        ) else {
+        return makeEncodedData(from: thumbnail, typeIdentifier: UTType.png.identifier)
+    }
+
+    /// ImageIO's transform also handles mirrored EXIF orientations, and using
+    /// the original longest side preserves every source pixel at full size.
+    private nonisolated static func makeOrientedImage(from source: CGImageSource) -> CGImage? {
+        guard let dimensions = pixelDimensions(from: source), !Task.isCancelled else {
             return nil
         }
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(dimensions.width, dimensions.height),
+            kCGImageSourceShouldCacheImmediately: true
+        ] as CFDictionary)
+    }
 
-        CGImageDestinationAddImage(destination, thumbnail, nil)
-        guard CGImageDestinationFinalize(destination) else {
+    private nonisolated static func makePreviewData(
+        from source: CGImageSource,
+        configuration: Configuration
+    ) -> Data? {
+        guard !Task.isCancelled else { return nil }
+        // This preview is independent of the tiny list thumbnail. Its compressed
+        // bytes are budgeted by the history store alongside the original image.
+        guard let data = makeThumbnailData(
+            from: source,
+            maximumDimension: configuration.previewMaximumDimension
+        ), data.count <= configuration.maximumPreviewBytes else {
             return nil
         }
-
-        return output as Data
+        return data
     }
 
     private nonisolated static func normalizeIfUseful(
@@ -232,29 +325,132 @@ actor ImageProcessor: ImageProcessing {
     }
 
     private nonisolated static func makePNGData(from source: CGImageSource) -> Data? {
-        guard let image = CGImageSourceCreateImageAtIndex(
-            source,
-            0,
-            [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
-        ) else {
+        guard let image = makeOrientedImage(from: source) else {
             return nil
         }
 
+        return makeEncodedData(
+            from: image,
+            typeIdentifier: UTType.png.identifier
+        )
+    }
+
+    private nonisolated static func makeEncodedData(
+        from image: CGImage,
+        typeIdentifier: String
+    ) -> Data? {
         let output = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
             output,
-            UTType.png.identifier as CFString,
+            typeIdentifier as CFString,
             1,
             nil
         ) else {
             return nil
         }
 
-        CGImageDestinationAddImage(destination, image, nil)
+        CGImageDestinationAddImage(destination, image, [
+            kCGImagePropertyOrientation: 1
+        ] as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
             return nil
         }
 
         return output as Data
+    }
+
+    private nonisolated static func processPDF(
+        _ candidate: ImageProcessingCandidate,
+        configuration: Configuration
+    ) -> ImageProcessingOutcome {
+        guard candidate.data.count <= configuration.maximumFinalBytes else {
+            return .failure(.finalDataTooLarge)
+        }
+        guard let provider = CGDataProvider(data: candidate.data as CFData),
+              let document = CGPDFDocument(provider),
+              !document.isEncrypted || document.isUnlocked,
+              let page = document.page(at: 1) else {
+            return .failure(.invalidFormat)
+        }
+        let bounds = page.getBoxRect(.cropBox)
+        guard bounds.origin.x.isFinite, bounds.origin.y.isFinite,
+              abs(bounds.origin.x) <= 100_000, abs(bounds.origin.y) <= 100_000,
+              bounds.width.isFinite, bounds.height.isFinite,
+              bounds.width > 0, bounds.height > 0,
+              bounds.width <= 100_000, bounds.height <= 100_000,
+              configuration.pdfMaximumRenderDimension > 0 else {
+            return .failure(.dimensionsTooLarge)
+        }
+        let rotation = ((page.rotationAngle % 360) + 360) % 360
+        let swapsAxes = rotation == 90 || rotation == 270
+        let pageWidth = swapsAxes ? bounds.height : bounds.width
+        let pageHeight = swapsAxes ? bounds.width : bounds.height
+        let longestSide = min(configuration.pdfMaximumRenderDimension, configuration.maximumDimension)
+        // Two pixels per PDF point is sharp at typical document sizes. Limit
+        // the raster to 2048px and the existing decode budget before allocation.
+        let scale = min(2, CGFloat(longestSide) / max(pageWidth, pageHeight))
+        let width = max(1, Int(ceil(pageWidth * scale)))
+        let height = max(1, Int(ceil(pageHeight * scale)))
+        let pixelCount = Int64(width) * Int64(height)
+        guard width <= configuration.maximumDimension,
+              height <= configuration.maximumDimension,
+              pixelCount <= configuration.maximumPixelCount,
+              pixelCount <= Int64(configuration.maximumCompatibilityDecodedBytes) / 4,
+              !Task.isCancelled else {
+            return .failure(Task.isCancelled ? .cancelled : .dimensionsTooLarge)
+        }
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: nil,
+                  width: width,
+                  height: height,
+                  bitsPerComponent: 8,
+                  bytesPerRow: width * 4,
+                  space: colorSpace,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else {
+            return .failure(.thumbnailCreationFailed)
+        }
+        let target = CGRect(x: 0, y: 0, width: width, height: height)
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(target)
+        context.saveGState()
+        // Apply the raster scale explicitly: the PDF drawing transform can
+        // center a small page without enlarging it when asked for a larger rect.
+        context.scaleBy(x: CGFloat(width) / pageWidth, y: CGFloat(height) / pageHeight)
+        context.concatenate(page.getDrawingTransform(
+            .cropBox,
+            rect: CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight),
+            rotate: 0,
+            preserveAspectRatio: true
+        ))
+        context.drawPDFPage(page)
+        context.restoreGState()
+        guard !Task.isCancelled else { return .failure(.cancelled) }
+        guard let renderedImage = context.makeImage(),
+              let pngData = makeEncodedData(
+                  from: renderedImage,
+                  typeIdentifier: UTType.png.identifier
+              ),
+              pngData.count <= configuration.maximumCompatibilityBytes,
+              let source = CGImageSourceCreateWithData(pngData as CFData, nil),
+              let thumbnailData = makeThumbnailData(
+                  from: source,
+                  maximumDimension: configuration.thumbnailMaximumDimension
+              ) else {
+            return .failure(.compatibilityEncodingFailed)
+        }
+        let previewData = makePreviewData(from: source, configuration: configuration)
+        guard !Task.isCancelled else { return .failure(.cancelled) }
+        return .success(ProcessedClipboardImage(
+            data: candidate.data,
+            typeIdentifier: UTType.pdf.identifier,
+            pixelWidth: width,
+            pixelHeight: height,
+            fingerprint: Data(SHA256.hash(data: candidate.data)),
+            thumbnailData: thumbnailData,
+            previewData: previewData,
+            additionalRepresentations: [UTType.png.identifier: pngData]
+        ))
     }
 }

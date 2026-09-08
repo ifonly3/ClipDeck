@@ -17,6 +17,11 @@ struct ClipboardRowView: View {
                 HStack(spacing: 6) {
                     Text(item.timestampText)
 
+                    if let captureNote = item.captureNote {
+                        Image(systemName: "exclamationmark.triangle")
+                            .help(captureNote)
+                    }
+
                     if isCopied {
                         Label(L10n.string("已复制"), systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.tint)
@@ -36,15 +41,15 @@ struct ClipboardRowView: View {
     }
 
     private var accessibilityLabel: String {
-        let contentType = item.image == nil ? L10n.string("文字") : L10n.string("图片")
         let copyStatus = isCopied ? L10n.string("，已复制") : ""
-        return L10n.string(
+        let label = L10n.string(
             "历史项目：%@，%@，%@%@",
-            contentType,
+            item.localizedContentType,
             item.preview,
             item.timestampText,
             copyStatus
         )
+        return item.captureNote.map { label + "，" + $0 } ?? label
     }
 
     @ViewBuilder
@@ -58,6 +63,24 @@ struct ClipboardRowView: View {
                     .resizable()
                     .scaledToFit()
                     .padding(3)
+            }
+            .frame(width: 54, height: 40)
+            .accessibilityHidden(true)
+        } else if let files = item.files, let firstFile = files.references.first {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: firstFile.systemImageName)
+                    .font(.system(size: 24))
+                    .foregroundStyle(.secondary)
+                    .padding(3)
+
+                if files.references.count > 1 {
+                    Text("\(files.references.count)")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(.tint, in: Capsule())
+                }
             }
             .frame(width: 54, height: 40)
             .accessibilityHidden(true)

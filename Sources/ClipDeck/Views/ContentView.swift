@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var selectedItemID: ClipboardItem.ID?
     @State private var hoveredItemID: ClipboardItem.ID?
     @State private var searchFocusRequestID = UUID()
+    @State private var handledPresentationID: UUID?
     @FocusState private var focusedArea: FocusArea?
 
     private var filteredItems: [ClipboardItem] {
@@ -81,14 +82,14 @@ struct ContentView: View {
             store.startMonitoring()
             registerHotKey()
             stabilizeSelection()
-            scheduleSearchFocus()
+            handleWindowPresented()
         }
         .onChange(of: filteredItemIDs) { _ in
             stabilizeSelection()
         }
         .onDeleteCommand(perform: deleteSelectedItem)
         .onReceive(NotificationCenter.default.publisher(for: .clipDeckMainWindowPresented)) { _ in
-            scheduleSearchFocus()
+            handleWindowPresented()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) {
             notification in
@@ -114,7 +115,7 @@ struct ContentView: View {
 
     private var statusText: String {
         let recordingStatus = store.isMonitoring
-            ? L10n.string("正在记录文字与图片")
+            ? L10n.string("正在记录文字、图片与文件")
             : L10n.string("记录已暂停")
         if hotKeyManager.errorMessage == nil {
             return L10n.string(
@@ -130,8 +131,14 @@ struct ContentView: View {
         VStack(spacing: 10) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(L10n.string("剪贴板历史"))
-                        .font(.title2.weight(.semibold))
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(L10n.string("剪贴板历史"))
+                            .font(.title2.weight(.semibold))
+                        Text(AppVersion.current.shortLabel)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .help(AppVersion.current.displayText)
+                    }
 
                     Text(statusText)
                         .font(.caption)
@@ -247,7 +254,8 @@ struct ContentView: View {
                     item: selectedItem,
                     isCopied: store.lastCopiedItemID == selectedItem.id,
                     onCopy: { copy(selectedItem) },
-                    onDelete: { delete(selectedItem) }
+                    onDelete: { delete(selectedItem) },
+                    onCopyPlainText: { copy(selectedItem, plainTextOnly: true) }
                 )
                 .id(selectedItem.id)
             } else {
@@ -294,12 +302,14 @@ struct ContentView: View {
                         hoveredItemID = isHovering ? item.id : nil
                     }
                     .contextMenu {
-                        Button(
-                            item.image == nil
-                                ? L10n.string("复制文字到剪贴板")
-                                : L10n.string("复制图片到剪贴板")
-                        ) {
+                        Button(item.localizedCopyActionTitle) {
                             copy(item)
+                        }
+
+                        if item.hasRichText {
+                            Button(L10n.string("复制为纯文本")) {
+                                copy(item, plainTextOnly: true)
+                            }
                         }
 
                         Divider()
@@ -348,6 +358,7 @@ struct ContentView: View {
     }
 
     private func moveSelection(by offset: Int) {
+        searchFocusRequestID = UUID()
         guard !filteredItems.isEmpty else {
             selectedItemID = nil
             return
@@ -386,17 +397,13 @@ struct ContentView: View {
         selectedItemID = filteredItems.first?.id
     }
 
-    private func copy(_ item: ClipboardItem) {
+    private func copy(_ item: ClipboardItem, plainTextOnly: Bool = false) {
         selectedItemID = item.id
-        guard store.copy(item) else {
+        guard store.copy(item, plainTextOnly: plainTextOnly) else {
             announce(L10n.string("复制失败"))
             return
         }
-        announce(
-            item.image == nil
-                ? L10n.string("文字已复制")
-                : L10n.string("图片已复制")
-        )
+        announce(plainTextOnly ? L10n.string("文字已复制") : item.localizedCopiedAnnouncement)
         windowCoordinator.returnToPreviousApplicationIfNeeded()
     }
 
@@ -426,7 +433,9 @@ struct ContentView: View {
 
         store.delete(item, undoManager: undoManager)
         selectedItemID = nextSelection
-        announce(L10n.string("已删除，可从编辑菜单撤销"))
+        announce(store.lastDeletionCanBeUndone
+            ? L10n.string("已删除，可从编辑菜单撤销")
+            : L10n.string("已删除"))
 
         DispatchQueue.main.async {
             focusedArea = nextSelection == nil ? .search : .history
@@ -463,6 +472,20 @@ struct ContentView: View {
             store.isClearConfirmationPresented = false
         } else {
             closeWindow()
+        }
+    }
+
+    private func handleWindowPresented() {
+        // A new window can report both onAppear and the presentation notification.
+        // Handle that request once so the second callback cannot steal row focus.
+        guard handledPresentationID != windowCoordinator.presentationID else { return }
+        handledPresentationID = windowCoordinator.presentationID
+        if let itemID = windowCoordinator.takeRequestedItemID(),
+           let item = store.items.first(where: { $0.id == itemID }) {
+            searchText = ""
+            select(item)
+        } else {
+            scheduleSearchFocus()
         }
     }
 
