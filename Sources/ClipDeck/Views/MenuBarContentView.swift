@@ -7,7 +7,6 @@ struct MenuBarContentView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var hotKeyManager: GlobalHotKeyManager
-    @State private var hoveredItemID: ClipboardItem.ID?
 
     private let rowHeight: CGFloat = 48
 
@@ -25,7 +24,8 @@ struct MenuBarContentView: View {
                 storageWarning: store.storageWarning,
                 captureWarning: store.captureWarning,
                 isCompact: true,
-                onRetryHotKey: registerHotKey
+                onRetryHotKey: { hotKeyManager.retry() },
+                beforeOpeningSettings: { dismiss() }
             )
 
             recentHistory
@@ -37,9 +37,9 @@ struct MenuBarContentView: View {
         .padding(14)
         .frame(width: 360)
         .onAppear {
+            windowCoordinator.registerMainWindowOpener { openWindow(id: "main") }
             windowCoordinator.rememberFrontmostApplication()
             store.startMonitoring()
-            registerHotKey()
         }
     }
 
@@ -75,10 +75,10 @@ struct MenuBarContentView: View {
         if hotKeyManager.errorMessage != nil {
             return L10n.string("全局快捷键不可用")
         }
-        return L10n.string(
-            "全局快捷键：%@",
-            GlobalHotKeyManager.shortcutDescription
-        )
+        guard let shortcut = hotKeyManager.shortcutDescription else {
+            return L10n.string("全局快捷键已关闭")
+        }
+        return L10n.string("全局快捷键：%@", shortcut)
     }
 
     @ViewBuilder
@@ -102,46 +102,14 @@ struct MenuBarContentView: View {
             ScrollView {
                 VStack(spacing: 2) {
                     ForEach(recentItems) { item in
-                        HStack(spacing: 2) {
-                            recentItemButton(for: item)
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(menuAccessibilityLabel(for: item))
-                                .accessibilityHint(L10n.string("复制到系统剪贴板"))
-
-                            Button {
-                                openHistory(selecting: item.id)
-                            } label: {
-                                Image(systemName: "arrow.up.right.square")
-                                    .frame(width: 26, height: 32)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.secondary)
-                            .help(L10n.string("查看完整内容"))
-                            .accessibilityLabel(L10n.string("查看详情：%@", item.preview))
-                        }
-                        .frame(height: rowHeight)
-                        .background {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(
-                                    hoveredItemID == item.id
-                                        ? Color.primary.opacity(0.07)
-                                        : Color.clear
-                                )
-                        }
-                        .onHover { isHovering in
-                            hoveredItemID = isHovering ? item.id : nil
-                        }
-                        .contextMenu {
-                            Button(L10n.string("查看完整内容")) {
-                                openHistory(selecting: item.id)
-                            }
-                            if item.hasRichText {
-                                Button(L10n.string("复制为纯文本")) {
-                                    copy(item, plainTextOnly: true)
-                                }
-                            }
-                        }
+                        MenuHistoryRow(
+                            item: item,
+                            isCopied: store.lastCopiedItemID == item.id,
+                            height: rowHeight,
+                            onCopy: { copy(item) },
+                            onCopyPlainText: { copy(item, plainTextOnly: true) },
+                            onOpenDetails: { openHistory(selecting: item.id) }
+                        )
                     }
                 }
             }
@@ -175,9 +143,88 @@ struct MenuBarContentView: View {
         }
     }
 
-    private func menuRow(for item: ClipboardItem) -> some View {
+    private func copy(_ item: ClipboardItem, plainTextOnly: Bool = false) {
+        guard store.copy(item, plainTextOnly: plainTextOnly) else {
+            announce(L10n.string("复制失败"))
+            return
+        }
+        announce(plainTextOnly ? L10n.string("文字已复制") : item.localizedCopiedAnnouncement)
+        if windowCoordinator.closesWindowAfterCopy {
+            dismiss()
+            windowCoordinator.returnToPreviousApplicationIfNeeded()
+        }
+    }
+
+    private func openHistory(selecting itemID: ClipboardItem.ID? = nil) {
+        dismiss()
+        DispatchQueue.main.async {
+            windowCoordinator.presentMainWindow(selecting: itemID) {
+                openWindow(id: "main")
+            }
+        }
+    }
+
+    private func announce(_ message: String) {
+        NSAccessibility.post(
+            element: NSApplication.shared,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: message,
+                .priority: NSAccessibilityPriorityLevel.medium.rawValue
+            ]
+        )
+    }
+
+}
+
+/// One recent item in the menu-bar window. Hover state lives here, so moving
+/// the pointer redraws a single row instead of the whole popover.
+private struct MenuHistoryRow: View {
+    let item: ClipboardItem
+    let isCopied: Bool
+    let height: CGFloat
+    let onCopy: () -> Void
+    let onCopyPlainText: () -> Void
+    let onOpenDetails: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Button(action: onCopy) {
+                rowContent
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityHint(L10n.string("复制到系统剪贴板"))
+
+            Button(action: onOpenDetails) {
+                Image(systemName: "arrow.up.right.square")
+                    .frame(width: 26, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(L10n.string("查看完整内容"))
+            .accessibilityLabel(L10n.string("查看详情：%@", item.preview))
+        }
+        .frame(height: height)
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isHovered ? Color.primary.opacity(0.07) : Color.clear)
+        }
+        .onHover { isHovered = $0 }
+        .contextMenu {
+            Button(L10n.string("查看完整内容"), action: onOpenDetails)
+            if item.hasRichText {
+                Button(L10n.string("复制为纯文本"), action: onCopyPlainText)
+            }
+        }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 9) {
-            menuPreview(for: item)
+            preview
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.menuTitle)
@@ -189,7 +236,7 @@ struct MenuBarContentView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if store.lastCopiedItemID == item.id {
+            if isCopied {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.tint)
                     .accessibilityHidden(true)
@@ -205,14 +252,8 @@ struct MenuBarContentView: View {
         .padding(.vertical, 6)
     }
 
-    private func recentItemButton(for item: ClipboardItem) -> some View {
-        Button(action: { copy(item) }) {
-            menuRow(for: item)
-        }
-    }
-
     @ViewBuilder
-    private func menuPreview(for item: ClipboardItem) -> some View {
+    private var preview: some View {
         if let image = item.image {
             ZStack {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -250,10 +291,8 @@ struct MenuBarContentView: View {
         }
     }
 
-    private func menuAccessibilityLabel(for item: ClipboardItem) -> String {
-        let copiedStatus = store.lastCopiedItemID == item.id
-            ? L10n.string("，已复制")
-            : ""
+    private var accessibilityLabel: String {
+        let copiedStatus = isCopied ? L10n.string("，已复制") : ""
         let label = L10n.string(
             "历史项目：%@，%@，%@%@",
             item.localizedContentType,
@@ -263,43 +302,5 @@ struct MenuBarContentView: View {
         )
         return item.captureNote.map { label + "，" + $0 } ?? label
     }
-
-    private func copy(_ item: ClipboardItem, plainTextOnly: Bool = false) {
-        guard store.copy(item, plainTextOnly: plainTextOnly) else {
-            announce(L10n.string("复制失败"))
-            return
-        }
-        announce(plainTextOnly ? L10n.string("文字已复制") : item.localizedCopiedAnnouncement)
-        if windowCoordinator.closesWindowAfterCopy {
-            dismiss()
-            windowCoordinator.returnToPreviousApplicationIfNeeded()
-        }
-    }
-
-    private func openHistory(selecting itemID: ClipboardItem.ID? = nil) {
-        dismiss()
-        DispatchQueue.main.async {
-            windowCoordinator.presentMainWindow(selecting: itemID) {
-                openWindow(id: "main")
-            }
-        }
-    }
-
-    private func registerHotKey() {
-        hotKeyManager.register {
-            openHistory()
-        }
-    }
-
-    private func announce(_ message: String) {
-        NSAccessibility.post(
-            element: NSApplication.shared,
-            notification: .announcementRequested,
-            userInfo: [
-                .announcement: message,
-                .priority: NSAccessibilityPriorityLevel.medium.rawValue
-            ]
-        )
-    }
-
 }
+

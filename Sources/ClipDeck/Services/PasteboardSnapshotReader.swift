@@ -30,6 +30,8 @@ enum PasteboardSnapshotOutcome: Sendable {
     case success(PasteboardSnapshot)
     case changed
     case unavailable
+    /// The privacy policy matched before any clipboard data was read.
+    case skipped(CaptureSkipReason)
 }
 
 /// NSPasteboard caches and native text controls share AppKit state. Keep every
@@ -42,6 +44,9 @@ final class PasteboardSnapshotReader: Sendable {
         let maximumImageCandidates: Int
         var maximumImageBytes: Int? = nil
         var maximumRichRepresentationBytes = 8 * 1024 * 1024
+        /// Text longer than this is rejected anyway; derive at most one byte more.
+        var maximumTextBytes: Int? = nil
+        var privacy = CapturePrivacyRules.disabled
     }
 
     static let legacyFiles = "NSFilenamesPboardType"
@@ -73,6 +78,15 @@ final class PasteboardSnapshotReader: Sendable {
     ) -> PasteboardSnapshotOutcome {
         guard pasteboard.changeCount == changeCount else { return .changed }
         guard let globalTypes = pasteboard.types else { return .unavailable }
+        // Decide on privacy from type names alone, before any data is read.
+        let typeNames = globalTypes.map(\.rawValue)
+        let declaredSource = !limits.privacy.ignoredBundleIdentifiers.isEmpty
+            && typeNames.contains(CapturePrivacyRules.sourceType)
+            ? pasteboard.string(forType: .init(CapturePrivacyRules.sourceType))
+            : nil
+        if let reason = limits.privacy.skipReason(types: typeNames, declaredSource: declaredSource) {
+            return .skipped(reason)
+        }
         let sourceItems = pasteboard.pasteboardItems ?? []
         guard sourceItems.count <= limits.maximumItems else {
             return .success(.init(changeCount: changeCount, items: [], byteLimit: limits.maximumBytes,
@@ -137,7 +151,7 @@ final class PasteboardSnapshotReader: Sendable {
                 unreadableTypes: unreadable,
                 oversizedTypes: oversized,
                 imageSignature: Data(imageHasher.finalize()),
-                textRepresentation: text(from: representations)
+                textRepresentation: text(from: representations, maximumBytes: limits.maximumTextBytes)
             ))
         }
         guard pasteboard.changeCount == changeCount else { return .changed }
@@ -195,9 +209,15 @@ final class PasteboardSnapshotReader: Sendable {
         return true
     }
 
-    static func text(from representations: [String: Data]) -> String? {
-        if let data = representations[plainText], let text = String(data: data, encoding: .utf8) {
-            return text
+    /// - Parameter maximumBytes: Text beyond this size is rejected by the store.
+    ///   Oversized sources return a string just over the limit, so callers can
+    ///   report the size without decoding or deriving megabytes of text.
+    static func text(from representations: [String: Data], maximumBytes: Int? = nil) -> String? {
+        if let data = representations[plainText] {
+            if let maximumBytes, data.count > maximumBytes {
+                return String(decoding: data.prefix(maximumBytes + 1), as: UTF8.self)
+            }
+            if let text = String(data: data, encoding: .utf8) { return text }
         }
         if let data = representations[NSPasteboard.PasteboardType.URL.rawValue],
            let url = String(data: data, encoding: .utf8) { return url }
@@ -212,36 +232,8 @@ final class PasteboardSnapshotReader: Sendable {
         }
         if let data = representations[NSPasteboard.PasteboardType.html.rawValue],
            let html = String(data: data, encoding: .utf8) {
-            return plainTextFromHTML(html)
+            return HTMLTextExtractor.plainText(fromHTML: html, maximumOutputBytes: maximumBytes)
         }
         return nil
-    }
-
-    /// A local text fallback; HTML is retained byte-for-byte for rich pastes.
-    /// Avoid WebKit's HTML importer, which can load external resources or block UI.
-    private static func plainTextFromHTML(_ html: String) -> String {
-        var value = html
-        for (pattern, replacement) in [
-            ("(?is)<(script|style)\\b[^>]*>.*?</\\1\\s*>", ""),
-            ("(?s)<!--.*?-->", ""),
-            ("(?i)<br\\s*/?>|</(?:p|div|li|tr|h[1-6])\\s*>", "\n"),
-            ("(?s)<[^>]+>", "")
-        ] {
-            value = value.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
-        }
-        let named = ["amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "nbsp": "\u{00a0}", "mdash": "—", "ndash": "–", "hellip": "…", "bull": "•", "copy": "©", "reg": "®"]
-        guard let regex = try? NSRegularExpression(pattern: "&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);") else { return value }
-        for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
-            guard let fullRange = Range(match.range, in: value), let nameRange = Range(match.range(at: 1), in: value) else { continue }
-            let name = String(value[nameRange])
-            let replacement: String?
-            if name.hasPrefix("#x"), let code = UInt32(name.dropFirst(2), radix: 16), let scalar = UnicodeScalar(code) {
-                replacement = String(scalar)
-            } else if name.hasPrefix("#"), let code = UInt32(name.dropFirst()), let scalar = UnicodeScalar(code) {
-                replacement = String(scalar)
-            } else { replacement = named[name] }
-            if let replacement { value.replaceSubrange(fullRange, with: replacement) }
-        }
-        return value
     }
 }

@@ -270,7 +270,7 @@ struct ClipboardBoundaryAndLifecycleTests {
         manager.groupsByEvent = false
         for value in ["AA", "BB", "CC"] {
             let item = ClipboardItem(text: value)
-            fixture.store.restore(item, at: 0)
+            fixture.store.restore(item)
             fixture.store.delete(item, undoManager: manager)
         }
         manager.undo()
@@ -278,7 +278,7 @@ struct ClipboardBoundaryAndLifecycleTests {
         #expect(Set(fixture.store.items.compactMap(\.text)) == Set(["BB", "CC"]))
         #expect(!manager.canUndo)
         let huge = ClipboardItem(text: "123456789")
-        fixture.store.restore(huge, at: 0)
+        fixture.store.restore(huge)
         fixture.store.delete(huge, undoManager: manager)
         #expect(!manager.canUndo)
         #expect(fixture.store.captureWarning != nil)

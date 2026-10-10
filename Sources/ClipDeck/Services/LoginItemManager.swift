@@ -114,12 +114,14 @@ final class LoginItemManager: ObservableObject {
             return
         }
 
-        if defaults.object(forKey: Self.legacyConfiguredKey) != nil {
-            defaults.set(isRegistered, forKey: Self.desiredEnabledKey)
-        } else {
-            // ClipDeck has historically enabled launch-at-login by default.
-            defaults.set(true, forKey: Self.desiredEnabledKey)
+        // Launch at login is opt-in. Keep whatever is already in place: an
+        // existing native registration, or a validated legacy LaunchAgent that
+        // will be migrated. A fresh install starts with it off.
+        var hasLegacyLaunchAgent = false
+        if case .valid = validatedLegacyLaunchAgent() {
+            hasLegacyLaunchAgent = true
         }
+        defaults.set(isRegistered || hasLegacyLaunchAgent, forKey: Self.desiredEnabledKey)
     }
 
     private func resumeMigrationOrReconcile() {
@@ -458,14 +460,21 @@ final class LoginItemManager: ObservableObject {
         process.arguments = arguments
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
+        let finished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in finished.signal() }
 
         do {
             try process.run()
-            process.waitUntilExit()
-            return LaunchctlResult(status: process.terminationStatus)
         } catch {
             return LaunchctlResult(status: -1)
         }
+        // Unlike waitUntilExit(), a semaphore does not spin the main run loop,
+        // so timers and UI events cannot re-enter the migration midway.
+        guard finished.wait(timeout: .now() + 10) == .success else {
+            process.terminate()
+            return LaunchctlResult(status: -1)
+        }
+        return LaunchctlResult(status: process.terminationStatus)
     }
 
     private static var isRunningInstalledApplication: Bool {

@@ -39,11 +39,11 @@ enum L10n {
             || normalizedIdentifier.hasPrefix("zh-hans-")
             || normalizedIdentifier == "zh-cn"
             || normalizedIdentifier.hasPrefix("zh-cn-")
-        let resourceName = usesSimplifiedChinese ? "zh-hans" : "en"
-        guard let localizationPath = runtimeBundle.path(
-            forResource: resourceName,
-            ofType: "lproj"
-        ), let localizationBundle = Bundle(path: localizationPath) else {
+        let resourceName = usesSimplifiedChinese ? "zh-Hans" : "en"
+        guard let localizationBundle = localizationBundle(
+            named: resourceName,
+            in: runtimeBundle
+        ) else {
             return localizedString(
                 key,
                 bundle: runtimeBundle,
@@ -58,6 +58,22 @@ enum L10n {
             locale: Locale(identifier: localeIdentifier),
             arguments: arguments
         )
+    }
+
+    /// Older SwiftPM toolchains lowercase `.lproj` folders (`zh-hans`) while
+    /// newer ones keep their original casing; Bundle resource lookups are
+    /// case-sensitive, so match against the localizations actually present.
+    static func localizationBundle(named localization: String, in bundle: Bundle) -> Bundle? {
+        let candidates = [localization] + bundle.localizations.filter {
+            $0 != localization && $0.caseInsensitiveCompare(localization) == .orderedSame
+        }
+        for candidate in candidates {
+            if let path = bundle.path(forResource: candidate, ofType: "lproj"),
+               let localizedBundle = Bundle(path: path) {
+                return localizedBundle
+            }
+        }
+        return nil
     }
 
     private static func localizedString(

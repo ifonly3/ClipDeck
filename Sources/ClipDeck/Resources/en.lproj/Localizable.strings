@@ -95,8 +95,6 @@
 "文字内容" = "Text content";
 "图片预览，%@" = "Image preview, %@";
 "文件列表，共 %lld 项" = "File list with %lld items";
-"单击选择 · ↑↓ 切换 · Return 复制 · Delete 删除 · Esc 关闭" = "Click to select · ↑↓ to move · Return to copy · Delete to remove · Esc to close";
-"操作：单击选择，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口" = "Actions: click to select, use the Up and Down Arrow keys to move, press Return to copy, Delete to remove, or Escape to close the window";
 "选择一条历史以预览" = "Select an item to preview";
 "使用 ↑↓ 选择，按 Return 复制。" = "Use ↑↓ to select, then press Return to copy.";
 "选择后按回车，或使用“复制”操作" = "After selecting, press Return or use the Copy action";
@@ -134,7 +132,6 @@
 "使用体验" = "Behavior";
 "复制后关闭窗口并返回上一个应用" = "Close the window and return to the previous app after copying";
 "监听和清空历史不会更改当前剪贴板；从历史复制会替换当前内容，但不会自动粘贴，也不需要辅助功能权限。" = "Monitoring and clearing history do not change the current clipboard. Copying a history item replaces it, but ClipDeck never pastes automatically and does not require Accessibility permission.";
-"系统截图" = "System Screenshots";
 "按 ⌃⇧⌘4 将选区截图复制到剪贴板，按 ⌃⇧⌘3 复制全屏；ClipDeck 会自动记录。若要长期启用，请按 ⇧⌘5，并在“选项 > 存储到”中选择“剪贴板”。" = "Press ⌃⇧⌘4 to copy a selected area or ⌃⇧⌘3 to copy the full screen; ClipDeck captures it automatically. To make this the default, press ⇧⌘5 and choose Clipboard under Options > Save to.";
 "启动" = "Startup";
 "登录时启动 ClipDeck" = "Launch ClipDeck at Login";
@@ -149,7 +146,6 @@
 /* Warnings and errors */
 "再次尝试启用全局快捷键" = "Try enabling the global shortcut again";
 "主窗口尚未准备好，暂时无法启用全局快捷键。" = "The main window is not ready, so the global shortcut cannot be enabled yet.";
-"无法启用全局快捷键（错误码 %d）。请检查快捷键冲突后重试。" = "Could not enable the global shortcut (error %d). Check for a shortcut conflict and try again.";
 "无法删除旧版本地历史；请退出应用后检查 Application Support/ClipDeck。" = "Could not remove legacy local history. Quit the app and check Application Support/ClipDeck.";
 "无法准备这段文字，请稍后再试。" = "Could not prepare this text. Try again shortly.";
 "这张图片暂时无法复制，请重新截取或复制原图。" = "This image cannot be copied right now. Capture it again or copy the original image.";
@@ -204,3 +200,38 @@
 "发现同名旧启动项但无法安全识别，请在系统设置中手动关闭。" = "A legacy login item with the same name could not be safely identified. Disable it manually in System Settings.";
 "无法卸载旧启动任务（错误码 %d）。" = "Could not unload the legacy launch job (error %d).";
 "无法删除旧启动项：%@" = "Could not remove the legacy login item: %@";
+
+/* Privacy, global shortcut, and search */
+"单击选择 · 双击复制 · ↑↓ 切换 · Return 复制 · Delete 删除 · Esc 关闭" = "Click to select · Double-click to copy · ↑↓ to move · Return to copy · Delete to remove · Esc to close";
+"操作：单击选择，双击复制，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口" = "Actions: click to select, double-click to copy, use the Up and Down Arrow keys to move, press Return to copy, Delete to remove, or Escape to close the window";
+"多个关键词用空格分隔，需全部匹配" = "Separate words with spaces; results match all of them";
+"昨天 %@" = "Yesterday %@";
+"文件所在位置暂时没有响应，未更改系统剪贴板。" = "The files' location is not responding. The system clipboard was not changed.";
+"全局快捷键" = "Global Shortcut";
+"全局快捷键已关闭" = "Global shortcut off";
+"%@ · 全局快捷键已关闭" = "%@ · Global shortcut off";
+"无法启用全局快捷键 %@（错误码 %d）。它可能已被其他应用占用，请在设置中更换。" = "Could not enable the global shortcut %@ (error %d). Another app may be using it; choose a different shortcut in Settings.";
+"更换快捷键…" = "Change Shortcut…";
+"点击后按下新的快捷键" = "Click, then press a new shortcut";
+"请按下新的快捷键…" = "Press a new shortcut…";
+"已关闭" = "Off";
+"关闭" = "Turn Off";
+"关闭全局快捷键，仍可从菜单栏打开历史" = "Turn off the global shortcut. History stays available from the menu bar.";
+"恢复默认" = "Restore Defaults";
+"需包含 ⌃，或 ⌘ 加另一个修饰键；F1–F20 可单独使用。再次按下可关闭历史窗口。" = "Use ⌃, or ⌘ with another modifier; F1–F20 work on their own. Press the shortcut again to close the history window.";
+"这个组合会影响正常输入或常用命令。请加上 ⌃，或用 ⌘ 搭配另一个修饰键。" = "This combination would interfere with typing or common commands. Add ⌃, or combine ⌘ with another modifier.";
+"无法使用这个按键，请换一个。" = "This key can't be used. Try another one.";
+"通用" = "General";
+"隐私" = "Privacy";
+"敏感内容" = "Sensitive Content";
+"跳过密码管理器等标记为机密或临时的内容" = "Skip content marked as confidential or temporary, such as passwords";
+"遵循 nspasteboard.org 约定：1Password、KeePassXC 等复制的密码，以及文本扩展工具的临时内容不会进入历史。ClipDeck 只看来源应用的标记，不分析内容本身。" = "Follows the nspasteboard.org conventions: passwords copied from apps such as 1Password and KeePassXC, and temporary content from text expanders, never enter history. ClipDeck only reads the source app's marker and never analyzes the content itself.";
+"忽略的应用" = "Ignored Apps";
+"没有忽略的应用。" = "No ignored apps.";
+"添加应用…" = "Add App…";
+"这些应用复制的内容不会被记录。若来源应用没有声明身份，以复制时的前台应用为准。" = "Content copied in these apps is never recorded. When the source app does not identify itself, the frontmost app at the time of copying is used.";
+"忽略" = "Ignore";
+"选择不想记录剪贴板内容的应用" = "Choose apps whose clipboard content should not be recorded";
+"未安装" = "Not installed";
+"不再忽略" = "Stop Ignoring";
+"不再忽略 %@" = "Stop ignoring %@";

@@ -23,10 +23,10 @@ func menuHistoryKeepsSpaceWhenTheWindowRequestsItsMinimumSize() throws {
         return controller.sizeThatFits(in: CGSize(width: 360, height: 0)).height
     }
 
-    store.restore(ClipboardItem(text: "First synthetic clipboard item"), at: 0)
+    store.restore(ClipboardItem(text: "First synthetic clipboard item"))
     let singleItemHeight = minimumHeight()
     for index in 2...8 {
-        store.restore(ClipboardItem(text: "Synthetic clipboard item \(index)"), at: 0)
+        store.restore(ClipboardItem(text: "Synthetic clipboard item \(index)"))
     }
     let eightItemHeight = minimumHeight()
     // Previously both minimum sizes contained only the header and footer:

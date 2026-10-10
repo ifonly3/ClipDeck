@@ -1,5 +1,15 @@
 # Changelog / 更新记录
 
+## 1.5.0 (build 11) — 2026-10-09
+
+- Skip content that apps mark as concealed, transient, or auto-generated (nspasteboard.org), and let users ignore apps; Passwords and Keychain Access are ignored by default. Skipped content is never read. / 遵守 nspasteboard.org 约定，跳过标记为机密、临时或自动生成的内容，并支持按应用忽略（默认忽略“密码”和“钥匙串访问”）；被跳过的内容不会被读取。
+- Restore formats in their original order and stop adding plain text that copied images never had. / 按原顺序恢复各格式，不再给复制的图片添加原本没有的纯文本。
+- Release rebuildable PNG/TIFF compatibility data from older images before evicting them, and rebuild it on copy, so more images fit in history. / 历史预算紧张时先释放较早图片可重建的 PNG/TIFF 兼容数据，复制时再重建，能保留更多图片。
+- Make the global shortcut customizable, register it at launch, and let it toggle the history window. / 全局快捷键可自定义、启动即生效，再按一次可关闭历史窗口。
+- Launch at login is now opt-in for new installs; existing setups are kept. / 新安装默认不开启登录时启动，已有设置保持不变。
+- Faster multi-word search, linear HTML text extraction, double-click to copy, dates for older items, correct ordering after undo, and bounded file availability checks. / 搜索更快并支持多关键词，HTML 文字提取改为线性算法，双击即可复制，较早条目显示日期，撤销后按时间顺序恢复，文件可用性检查不再无限阻塞。
+- Support newer SwiftPM resource bundle layouts in packaging, localization lookup, and CI. / 打包、本地化查找和 CI 兼容新版 SwiftPM 的资源包结构。
+
 ## 1.4.1 (build 10) — 2026-09-08
 
 - Show the installed version beside the history heading and in Settings, including the build number. / 在历史标题旁和设置底部显示真实安装版本及构建号。

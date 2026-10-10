@@ -14,25 +14,22 @@ struct ContentView: View {
     @ObservedObject var hotKeyManager: GlobalHotKeyManager
 
     @State private var searchText = ""
+    /// Filtered once per search or history change instead of on every render.
+    @State private var cachedVisibleItems: [ClipboardItem]?
     @State private var selectedItemID: ClipboardItem.ID?
-    @State private var hoveredItemID: ClipboardItem.ID?
     @State private var searchFocusRequestID = UUID()
     @State private var handledPresentationID: UUID?
     @FocusState private var focusedArea: FocusArea?
 
-    private var filteredItems: [ClipboardItem] {
-        store.filteredItems(matching: searchText)
-    }
-
-    private var filteredItemIDs: [ClipboardItem.ID] {
-        filteredItems.map(\.id)
+    private var visibleItems: [ClipboardItem] {
+        cachedVisibleItems ?? store.filteredItems(matching: searchText)
     }
 
     private var selectedItem: ClipboardItem? {
         guard let selectedItemID else {
             return nil
         }
-        return filteredItems.first { $0.id == selectedItemID }
+        return visibleItems.first { $0.id == selectedItemID }
     }
 
     var body: some View {
@@ -45,14 +42,14 @@ struct ContentView: View {
                 storageWarning: store.storageWarning,
                 captureWarning: store.captureWarning,
                 isCompact: false,
-                onRetryHotKey: registerHotKey
+                onRetryHotKey: { hotKeyManager.retry() }
             )
 
             Divider()
 
-            if filteredItems.isEmpty {
+            if visibleItems.isEmpty {
                 EmptyStateView(
-                    isSearching: !normalizedSearchText.isEmpty,
+                    isSearching: !ClipboardSearchQuery(searchText).isEmpty,
                     isMonitoring: store.isMonitoring,
                     onClearSearch: clearSearch,
                     onStartMonitoring: { store.isMonitoring = true }
@@ -79,13 +76,17 @@ struct ContentView: View {
             Text(L10n.string("此操作无法撤销，但不会影响当前系统剪贴板。"))
         }
         .onAppear {
+            windowCoordinator.registerMainWindowOpener { openWindow(id: "main") }
             store.startMonitoring()
-            registerHotKey()
-            stabilizeSelection()
+            refreshVisibleItems(from: store.items)
             handleWindowPresented()
         }
-        .onChange(of: filteredItemIDs) { _ in
-            stabilizeSelection()
+        .onChange(of: searchText) { _ in
+            refreshVisibleItems(from: store.items)
+        }
+        // `$items` publishes the new value before the property changes.
+        .onReceive(store.$items) { items in
+            refreshVisibleItems(from: items)
         }
         .onDeleteCommand(perform: deleteSelectedItem)
         .onReceive(NotificationCenter.default.publisher(for: .clipDeckMainWindowPresented)) { _ in
@@ -102,10 +103,6 @@ struct ContentView: View {
         }
     }
 
-    private var normalizedSearchText: String {
-        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     private var clearHistoryButtonTitle: String {
         if store.items.count == 1 {
             return L10n.string("清空 1 条历史")
@@ -117,14 +114,13 @@ struct ContentView: View {
         let recordingStatus = store.isMonitoring
             ? L10n.string("正在记录文字、图片与文件")
             : L10n.string("记录已暂停")
-        if hotKeyManager.errorMessage == nil {
-            return L10n.string(
-                "%@ · 全局唤起 %@",
-                recordingStatus,
-                GlobalHotKeyManager.shortcutDescription
-            )
+        if hotKeyManager.errorMessage != nil {
+            return L10n.string("%@ · 全局快捷键不可用", recordingStatus)
         }
-        return L10n.string("%@ · 全局快捷键不可用", recordingStatus)
+        guard let shortcut = hotKeyManager.shortcutDescription else {
+            return L10n.string("%@ · 全局快捷键已关闭", recordingStatus)
+        }
+        return L10n.string("%@ · 全局唤起 %@", recordingStatus, shortcut)
     }
 
     private var header: some View {
@@ -206,6 +202,7 @@ struct ContentView: View {
             TextField(L10n.string("搜索历史"), text: $searchText)
                 .textFieldStyle(.plain)
                 .focused($focusedArea, equals: .search)
+                .help(L10n.string("多个关键词用空格分隔，需全部匹配"))
                 .accessibilityLabel(L10n.string("搜索剪贴板历史"))
                 .accessibilityHint(L10n.string("输入关键词筛选，按上下方向键选择结果"))
 
@@ -268,57 +265,21 @@ struct ContentView: View {
     private var historyList: some View {
         ScrollViewReader { proxy in
             List(selection: $selectedItemID) {
-                ForEach(filteredItems) { item in
-                    HStack(spacing: 6) {
-                        ClipboardRowView(
-                            item: item,
-                            isCopied: store.lastCopiedItemID == item.id
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            select(item)
-                        }
-                        .accessibilityAction(named: Text(L10n.string("复制"))) {
-                            copy(item)
-                        }
-
-                        Button(role: .destructive) {
+                ForEach(visibleItems) { item in
+                    HistoryRow(
+                        item: item,
+                        isSelected: selectedItemID == item.id,
+                        isCopied: store.lastCopiedItemID == item.id,
+                        onSelect: { select(item) },
+                        onCopy: { copy(item) },
+                        onCopyPlainText: { copy(item, plainTextOnly: true) },
+                        onDelete: {
                             select(item)
                             delete(item)
-                        } label: {
-                            Image(systemName: "trash")
-                                .frame(width: 18, height: 18)
                         }
-                        .buttonStyle(.borderless)
-                        .opacity(hoveredItemID == item.id || selectedItemID == item.id ? 1 : 0.4)
-                        .help(L10n.string("删除此条历史（可撤销）"))
-                        .accessibilityLabel(L10n.string("删除：%@", item.preview))
-                        .accessibilityHint(L10n.string("删除后可从编辑菜单撤销"))
-                    }
+                    )
                     .tag(item.id)
                     .id(item.id)
-                    .onHover { isHovering in
-                        hoveredItemID = isHovering ? item.id : nil
-                    }
-                    .contextMenu {
-                        Button(item.localizedCopyActionTitle) {
-                            copy(item)
-                        }
-
-                        if item.hasRichText {
-                            Button(L10n.string("复制为纯文本")) {
-                                copy(item, plainTextOnly: true)
-                            }
-                        }
-
-                        Divider()
-
-                        Button(L10n.string("删除"), role: .destructive) {
-                            select(item)
-                            delete(item)
-                        }
-                    }
                 }
             }
             .listStyle(.sidebar)
@@ -333,20 +294,24 @@ struct ContentView: View {
         }
     }
 
+    private var selectedIndex: Int? {
+        guard let selectedItemID else { return nil }
+        return visibleItems.firstIndex { $0.id == selectedItemID }
+    }
+
     private var canSelectPreviousItem: Bool {
-        guard let selectedItemID,
-              let index = filteredItems.firstIndex(where: { $0.id == selectedItemID }) else {
+        guard let index = selectedIndex else {
             return false
         }
-        return index > filteredItems.startIndex
+        return index > 0
     }
 
     private var canSelectNextItem: Bool {
-        guard let selectedItemID,
-              let index = filteredItems.firstIndex(where: { $0.id == selectedItemID }) else {
-            return !filteredItems.isEmpty
+        let items = visibleItems
+        guard let index = selectedIndex else {
+            return !items.isEmpty
         }
-        return index < filteredItems.index(before: filteredItems.endIndex)
+        return index < items.count - 1
     }
 
     private func selectPreviousItem() {
@@ -359,23 +324,19 @@ struct ContentView: View {
 
     private func moveSelection(by offset: Int) {
         searchFocusRequestID = UUID()
-        guard !filteredItems.isEmpty else {
+        let items = visibleItems
+        guard !items.isEmpty else {
             selectedItemID = nil
             return
         }
 
-        guard let currentIndex = selectedItemID.flatMap({ selectedID in
-            filteredItems.firstIndex { $0.id == selectedID }
-        }) else {
-            selectedItemID = filteredItems.first?.id
+        guard let currentIndex = selectedIndex else {
+            selectedItemID = items.first?.id
             focusedArea = .history
             return
         }
-        let destination = min(
-            max(filteredItems.startIndex, currentIndex + offset),
-            filteredItems.index(before: filteredItems.endIndex)
-        )
-        selectedItemID = filteredItems[destination].id
+        let destination = min(max(0, currentIndex + offset), items.count - 1)
+        selectedItemID = items[destination].id
         focusedArea = .history
     }
 
@@ -385,16 +346,22 @@ struct ContentView: View {
         focusedArea = .history
     }
 
+    private func refreshVisibleItems(from items: [ClipboardItem]) {
+        cachedVisibleItems = ClipboardSearchQuery(searchText).filter(items)
+        stabilizeSelection()
+    }
+
     private func stabilizeSelection() {
-        guard !filteredItems.isEmpty else {
+        let items = visibleItems
+        guard !items.isEmpty else {
             selectedItemID = nil
             return
         }
 
-        if let selectedItemID, filteredItems.contains(where: { $0.id == selectedItemID }) {
+        if let selectedItemID, items.contains(where: { $0.id == selectedItemID }) {
             return
         }
-        selectedItemID = filteredItems.first?.id
+        selectedItemID = items.first?.id
     }
 
     private func copy(_ item: ClipboardItem, plainTextOnly: Bool = false) {
@@ -419,14 +386,14 @@ struct ContentView: View {
             return
         }
 
-        let visibleItems = filteredItems
-        let visibleIndex = visibleItems.firstIndex(where: { $0.id == item.id })
+        let items = visibleItems
+        let visibleIndex = items.firstIndex(where: { $0.id == item.id })
         let nextSelection = visibleIndex.flatMap { index -> ClipboardItem.ID? in
-            if index + 1 < visibleItems.endIndex {
-                return visibleItems[index + 1].id
+            if index + 1 < items.endIndex {
+                return items[index + 1].id
             }
-            if index > visibleItems.startIndex {
-                return visibleItems[index - 1].id
+            if index > items.startIndex {
+                return items[index - 1].id
             }
             return nil
         }
@@ -451,16 +418,8 @@ struct ContentView: View {
 
     private func clearSearch() {
         searchText = ""
-        stabilizeSelection()
+        refreshVisibleItems(from: store.items)
         focusedArea = .search
-    }
-
-    private func registerHotKey() {
-        hotKeyManager.register {
-            windowCoordinator.presentMainWindow {
-                openWindow(id: "main")
-            }
-        }
     }
 
     private func closeWindow() {
@@ -483,6 +442,7 @@ struct ContentView: View {
         if let itemID = windowCoordinator.takeRequestedItemID(),
            let item = store.items.first(where: { $0.id == itemID }) {
             searchText = ""
+            refreshVisibleItems(from: store.items)
             select(item)
         } else {
             scheduleSearchFocus()
@@ -511,5 +471,54 @@ struct ContentView: View {
                 .priority: NSAccessibilityPriorityLevel.medium.rawValue
             ]
         )
+    }
+}
+
+/// One history row. Hover state lives here, so moving the pointer across the
+/// list redraws a single row instead of the whole window.
+private struct HistoryRow: View {
+    let item: ClipboardItem
+    let isSelected: Bool
+    let isCopied: Bool
+    let onSelect: () -> Void
+    let onCopy: () -> Void
+    let onCopyPlainText: () -> Void
+    let onDelete: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ClipboardRowView(item: item, isCopied: isCopied)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                // Double-click copies; the simultaneous single tap still selects
+                // immediately instead of waiting for the double-click timeout.
+                .onTapGesture(count: 2, perform: onCopy)
+                .simultaneousGesture(TapGesture().onEnded { onSelect() })
+                .accessibilityAction(named: Text(L10n.string("复制")), onCopy)
+
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+                    .frame(width: 18, height: 18)
+            }
+            .buttonStyle(.borderless)
+            .opacity(isHovered || isSelected ? 1 : 0.4)
+            .help(L10n.string("删除此条历史（可撤销）"))
+            .accessibilityLabel(L10n.string("删除：%@", item.preview))
+            .accessibilityHint(L10n.string("删除后可从编辑菜单撤销"))
+        }
+        .onHover { isHovered = $0 }
+        .contextMenu {
+            Button(item.localizedCopyActionTitle, action: onCopy)
+
+            if item.hasRichText {
+                Button(L10n.string("复制为纯文本"), action: onCopyPlainText)
+            }
+
+            Divider()
+
+            Button(L10n.string("删除"), role: .destructive, action: onDelete)
+        }
     }
 }

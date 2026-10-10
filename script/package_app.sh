@@ -69,14 +69,19 @@ chmod +x "$STAGED_MACOS/$APP_NAME"
 
 # InfoPlist.strings must live directly in the app's localized resource folders;
 # Localizable.strings remains in the SwiftPM module bundle resolved by L10n.
+# SwiftPM's bundle layout (flat vs. Contents/Resources) and .lproj casing differ
+# between toolchains, so copy InfoPlist.strings from the sources and only search
+# the built bundle case-insensitively.
+SOURCE_RESOURCES="$ROOT_DIR/Sources/$APP_NAME/Resources"
 for LOCALIZATION in en zh-Hans; do
-  RESOURCE_LOCALIZATION="$LOCALIZATION"
-  if [[ "$LOCALIZATION" == "zh-Hans" ]]; then
-    RESOURCE_LOCALIZATION="zh-hans"
-  fi
-  LOCALIZED_INFO="$RESOURCE_BUNDLE/$RESOURCE_LOCALIZATION.lproj/InfoPlist.strings"
+  LOCALIZED_INFO="$SOURCE_RESOURCES/$LOCALIZATION.lproj/InfoPlist.strings"
   if [[ ! -f "$LOCALIZED_INFO" ]]; then
     echo "missing localized Info.plist strings: $LOCALIZED_INFO" >&2
+    exit 1
+  fi
+  BUILT_STRINGS="$(find "$RESOURCE_BUNDLE" -ipath "*/$LOCALIZATION.lproj/Localizable.strings" -print -quit)"
+  if [[ -z "$BUILT_STRINGS" ]]; then
+    echo "missing $LOCALIZATION Localizable.strings in $RESOURCE_BUNDLE" >&2
     exit 1
   fi
   mkdir -p "$STAGED_RESOURCES/$LOCALIZATION.lproj"

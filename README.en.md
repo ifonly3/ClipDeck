@@ -24,11 +24,11 @@ ClipDeck is a **native, focused, and fast** clipboard history utility for macOS.
 - **Images and PDFs:** Supports common PNG, JPEG, HEIC, GIF, and TIFF images. PDFs retain their original multi-page data with a first-page preview.
 - **One copy, one history entry:** Items copied together stay grouped and are restored in their original order.
 - **Finder files and folders:** Keeps a multi-file selection as one history item while storing references only—ClipDeck never reads or duplicates file contents.
-- **Pointer and keyboard friendly:** Press `⌃⌥V`, click an item or move with `↑` / `↓`, then press `Return` to copy it.
+- **Pointer and keyboard friendly:** Press `⌃⌥V` (customizable; press it again to close), click an item or move with `↑` / `↓`, then press `Return`—or just double-click—to copy it.
 - **Always available from the menu bar:** See the eight most recent entries; click to restore or use the details button to open the matching entry.
-- **Session-level privacy:** History stays in memory and is cleared when ClipDeck quits. Nothing is written to disk or uploaded.
+- **Session-level privacy:** History stays in memory and is cleared when ClipDeck quits. Nothing is written to disk or uploaded. Passwords and temporary content that apps mark as confidential are skipped, and you can ignore whole apps.
 - **Predictable controls:** Pause capture, search, delete and undo individual items, confirm before clearing, and return to the previous app after copying.
-- **Native launch at login:** Uses the macOS login-item API instead of a persistent LaunchAgent.
+- **Native launch at login (opt-in):** Off by default; when enabled, it uses the macOS login-item API instead of a persistent LaunchAgent.
 - **Bilingual interface:** Supports English and Simplified Chinese and follows the macOS system language automatically.
 
 ## Interface
@@ -45,7 +45,7 @@ ClipDeck is a **native, focused, and fast** clipboard history utility for macOS.
     </td>
     <td width="40%" valign="top">
       <img src="docs/screenshots/en/settings.png" alt="ClipDeck native settings window">
-      <br><sub><strong>Native settings:</strong> control capture, close-after-copy behavior, and launch at login.</sub>
+      <br><sub><strong>Native settings:</strong> control capture, the global shortcut, close-after-copy behavior, launch at login, and privacy.</sub>
     </td>
   </tr>
 </table>
@@ -103,9 +103,10 @@ Main-window shortcuts:
 
 | Action | Shortcut |
 | --- | --- |
-| Show ClipDeck globally | `⌃⌥V` |
-| Search | `⌘F` |
+| Show or hide ClipDeck globally | `⌃⌥V` (change it in Settings) |
+| Search (space-separated words must all match) | `⌘F` |
 | Select with the pointer | Click any history item |
+| Copy with the pointer | Double-click any history item |
 | Select previous / next | `↑` / `↓` |
 | Copy selected content | `Return` |
 | Delete selected content | `Delete` |
@@ -124,14 +125,14 @@ Clipboard history exists only in the current process memory. Quitting, signing o
 
 Background capture only reads the system clipboard and never rewrites its current contents. The clipboard changes only when you explicitly choose a history item and copy it back so it can be pasted; ClipDeck never performs the paste itself.
 
-ClipDeck does not try to decide whether content is sensitive. Any readable text, image, or file reference within the safety limits is recorded under the same rules. File history contains only URLs and names; ClipDeck never reads file contents. If an original is moved, deleted, or stored on a disconnected volume, restoring it shows a clear error without changing the current system clipboard. Ordinary preferences such as window position and close-after-copy behavior are stored with macOS `UserDefaults`; they never contain clipboard text, images, or file references.
+ClipDeck never analyzes content to guess whether it is sensitive. Instead it honors the [nspasteboard.org](http://nspasteboard.org) markers that apps add on purpose: content marked concealed, transient, or auto-generated—such as passwords copied from 1Password or KeePassXC—is skipped before any of its data is read. **Settings > Privacy** also lists ignored apps (Passwords and Keychain Access by default); content copied in them is never recorded. When an app does not declare itself, the app that was frontmost at copy time is used. Everything else that is readable and within the safety limits is recorded under the same rules. File history contains only URLs and names; ClipDeck never reads file contents. If an original is moved, deleted, or stored on a disconnected volume, restoring it shows a clear error without changing the current system clipboard. Ordinary preferences such as window position and close-after-copy behavior are stored with macOS `UserDefaults`; they never contain clipboard text, images, or file references.
 
 Default limits:
 
 - Up to 40 history items.
 - Up to 50,000 UTF-8 bytes per text part, and 256 items or file references in one copied group.
 - Up to 8 MiB per rich-text representation.
-- Up to 32 MiB and 16 megapixels per image, with a maximum edge of 12,000 pixels; every captured image retains or receives a broadly compatible PNG/TIFF clipboard representation.
+- Up to 32 MiB and 16 megapixels per image, with a maximum edge of 12,000 pixels; every captured image retains or receives a broadly compatible PNG/TIFF clipboard representation. These generated formats are rebuildable: when the history budget runs low, older images release them first and ClipDeck rebuilds them when the image is copied again, so far more images fit in history.
 - A shared 128 MiB retained-data budget covers all history, original formats, and derived previews. This conservative accounting is not a process-wide memory ceiling.
 - Deleted-item undo has a separate budget of 20 actions and 64 MiB; oldest actions are discarded when necessary. Clearing history also removes history-deletion undo, so cleared items cannot reappear through Undo.
 
@@ -140,10 +141,11 @@ Boundaries: Finder entries store references, not file backups. File promises (te
 ## Performance design
 
 - Observes clipboard changes with a low-frequency timer instead of busy polling.
-- Keeps native pasteboard access on the main thread to avoid racing AppKit caches used by search fields and standard copy actions; image decoding, hashing, and preview generation run in a background actor.
+- Keeps native pasteboard access on the main thread to avoid racing AppKit caches used by search fields and standard copy actions; image decoding, fingerprinting, and preview generation run in a background actor. A quick signature hash of the image bytes (about 35 ms for 96 MiB) still runs on the main thread to recognize retries.
 - Preserves compressed source data and caches separate 320 px list thumbnails and detail previews up to 960 px, with consistent rotation and mirroring.
 - Uses a bounded image queue so a burst of large images cannot block later text captures or exhaust memory.
-- Caches searchable text, menu titles, and timestamp strings to reduce SwiftUI recomputation and idle wakeups.
+- Caches normalized search text and menu titles, filters history once per search or history change, and compares normalized UTF-8 bytes directly: 40 items of about 46 KB filter in under a millisecond.
+- Extracts text from HTML-only clipboard content in a single linear pass, so even 8 MiB of markup cannot stall the interface.
 
 Known limitation: a slow synchronous macOS clipboard provider can still briefly block the interface while returning its raw data; size limits can only be checked after that return. Background access to the same `NSPasteboard` caused an AppKit cache crash in concurrent stress tests, so that unsafe optimization is not included in this release.
 

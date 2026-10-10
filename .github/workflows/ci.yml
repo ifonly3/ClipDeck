@@ -9,7 +9,13 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: macos-15
+    # The pinned image keeps a stable baseline; macos-latest surfaces toolchain
+    # changes (for example SwiftPM resource bundle layouts) before they ship.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -35,8 +41,10 @@ jobs:
           APP_PATH="${PACKAGE_ROOT}/ClipDeck.app"
           ./script/package_app.sh release "$APP_PATH"
           test -x "$APP_PATH/Contents/MacOS/ClipDeck"
-          test -f "$APP_PATH/Contents/Resources/ClipDeck_ClipDeck.bundle/en.lproj/Localizable.strings"
-          test -f "$APP_PATH/Contents/Resources/ClipDeck_ClipDeck.bundle/zh-hans.lproj/Localizable.strings"
-          test -f "$APP_PATH/Contents/Resources/en.lproj/InfoPlist.strings"
-          test -f "$APP_PATH/Contents/Resources/zh-Hans.lproj/InfoPlist.strings"
+          RESOURCE_BUNDLE="$APP_PATH/Contents/Resources/ClipDeck_ClipDeck.bundle"
+          # SwiftPM's bundle layout and .lproj casing vary by toolchain.
+          for LOCALIZATION in en zh-Hans; do
+            test -n "$(find "$RESOURCE_BUNDLE" -ipath "*/$LOCALIZATION.lproj/Localizable.strings" -print -quit)"
+            test -f "$APP_PATH/Contents/Resources/$LOCALIZATION.lproj/InfoPlist.strings"
+          done
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"

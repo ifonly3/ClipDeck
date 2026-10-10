@@ -32,6 +32,7 @@ final class WindowCoordinator: ObservableObject {
 
     private let defaults: UserDefaults
     private var previousApplication: NSRunningApplication?
+    private var mainWindowOpener: (() -> Void)?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -42,6 +43,35 @@ final class WindowCoordinator: ObservableObject {
                 forKey: Self.closesWindowAfterCopyDefaultsKey
             )
         }
+    }
+
+    /// Views that can open SwiftUI windows hand over their `openWindow` action,
+    /// so the global shortcut works whichever surface appeared first.
+    func registerMainWindowOpener(_ opener: @escaping () -> Void) {
+        mainWindowOpener = opener
+    }
+
+    /// The global shortcut toggles history: it opens the window, or closes it
+    /// and returns to the previous app when the window is already in front.
+    func handleGlobalShortcut() {
+        if NSApp.isActive, let mainWindow = Self.mainWindow, mainWindow.isVisible, mainWindow.isKeyWindow {
+            returnToPreviousApplication(closeKeyWindow: true)
+            return
+        }
+        presentMainWindow(open: mainWindowOpener ?? Self.openMainWindowThroughWindowMenu)
+    }
+
+    /// Fallback before any SwiftUI view has appeared: SwiftUI lists the window
+    /// in the Window menu, and choosing that item opens it again.
+    private static func openMainWindowThroughWindowMenu() {
+        guard mainWindow == nil else { return }
+        let menuItems = NSApp.mainMenu?.items.flatMap { $0.submenu?.items ?? [] } ?? []
+        guard let item = menuItems.first(where: {
+            $0.title == "ClipDeck" && $0.submenu == nil && $0.action != nil
+        }), let action = item.action else {
+            return
+        }
+        NSApp.sendAction(action, to: item.target, from: item)
     }
 
     /// Records the app the user came from, then presents the existing SwiftUI window.

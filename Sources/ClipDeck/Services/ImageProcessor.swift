@@ -366,7 +366,44 @@ actor ImageProcessor: ImageProcessing {
         guard candidate.data.count <= configuration.maximumFinalBytes else {
             return .failure(.finalDataTooLarge)
         }
-        guard let provider = CGDataProvider(data: candidate.data as CFData),
+        let renderedImage: CGImage
+        switch renderFirstPDFPage(candidate.data, configuration: configuration) {
+        case .success(let image): renderedImage = image
+        case .failure(let failure): return .failure(failure)
+        }
+        guard let pngData = makeEncodedData(
+                  from: renderedImage,
+                  typeIdentifier: UTType.png.identifier
+              ),
+              pngData.count <= configuration.maximumCompatibilityBytes,
+              let source = CGImageSourceCreateWithData(pngData as CFData, nil),
+              let thumbnailData = makeThumbnailData(
+                  from: source,
+                  maximumDimension: configuration.thumbnailMaximumDimension
+              ) else {
+            return .failure(.compatibilityEncodingFailed)
+        }
+        let previewData = makePreviewData(from: source, configuration: configuration)
+        guard !Task.isCancelled else { return .failure(.cancelled) }
+        return .success(ProcessedClipboardImage(
+            data: candidate.data,
+            typeIdentifier: UTType.pdf.identifier,
+            pixelWidth: renderedImage.width,
+            pixelHeight: renderedImage.height,
+            fingerprint: Data(SHA256.hash(data: candidate.data)),
+            thumbnailData: thumbnailData,
+            previewData: previewData,
+            additionalRepresentations: [UTType.png.identifier: pngData]
+        ))
+    }
+
+    /// Rasterizes page one of a PDF within the decode budget. Shared by capture
+    /// and by rebuilding a dropped compatibility raster, so both match.
+    private nonisolated static func renderFirstPDFPage(
+        _ data: Data,
+        configuration: Configuration
+    ) -> Result<CGImage, ImageProcessingFailure> {
+        guard let provider = CGDataProvider(data: data as CFData),
               let document = CGPDFDocument(provider),
               !document.isEncrypted || document.isUnlocked,
               let page = document.page(at: 1) else {
@@ -427,30 +464,37 @@ actor ImageProcessor: ImageProcessing {
         context.drawPDFPage(page)
         context.restoreGState()
         guard !Task.isCancelled else { return .failure(.cancelled) }
-        guard let renderedImage = context.makeImage(),
-              let pngData = makeEncodedData(
-                  from: renderedImage,
-                  typeIdentifier: UTType.png.identifier
-              ),
-              pngData.count <= configuration.maximumCompatibilityBytes,
-              let source = CGImageSourceCreateWithData(pngData as CFData, nil),
-              let thumbnailData = makeThumbnailData(
-                  from: source,
-                  maximumDimension: configuration.thumbnailMaximumDimension
-              ) else {
-            return .failure(.compatibilityEncodingFailed)
+        guard let image = context.makeImage() else { return .failure(.compatibilityEncodingFailed) }
+        return .success(image)
+    }
+
+    /// Rebuilds compatibility rasters that history dropped to stay within its
+    /// memory budget. Runs synchronously: restoring an older item is a
+    /// user-initiated action, and the source image already decoded at capture.
+    nonisolated static func rebuildDerivedRepresentations(
+        _ types: [String],
+        fromPrimary data: Data,
+        typeIdentifier: String,
+        configuration: Configuration = .default
+    ) -> [String: Data] {
+        let wanted = types.filter { $0 == UTType.png.identifier || $0 == UTType.tiff.identifier }
+        guard !wanted.isEmpty else { return [:] }
+        let image: CGImage?
+        if UTType(typeIdentifier)?.conforms(to: .pdf) == true {
+            image = try? renderFirstPDFPage(data, configuration: configuration).get()
+        } else if let source = CGImageSourceCreateWithData(
+            data as CFData,
+            [kCGImageSourceShouldCache: false] as CFDictionary
+        ) {
+            image = makeOrientedImage(from: source)
+        } else {
+            image = nil
         }
-        let previewData = makePreviewData(from: source, configuration: configuration)
-        guard !Task.isCancelled else { return .failure(.cancelled) }
-        return .success(ProcessedClipboardImage(
-            data: candidate.data,
-            typeIdentifier: UTType.pdf.identifier,
-            pixelWidth: width,
-            pixelHeight: height,
-            fingerprint: Data(SHA256.hash(data: candidate.data)),
-            thumbnailData: thumbnailData,
-            previewData: previewData,
-            additionalRepresentations: [UTType.png.identifier: pngData]
-        ))
+        guard let image else { return [:] }
+        var rebuilt: [String: Data] = [:]
+        for type in wanted {
+            rebuilt[type] = makeEncodedData(from: image, typeIdentifier: type)
+        }
+        return rebuilt
     }
 }

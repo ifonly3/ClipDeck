@@ -7,6 +7,8 @@ struct ClipboardWarningsView: View {
     let captureWarning: String?
     let isCompact: Bool
     let onRetryHotKey: () -> Void
+    /// Lets a menu-bar popover close itself before Settings opens.
+    var beforeOpeningSettings: () -> Void = {}
 
     var body: some View {
         if hasWarnings {
@@ -17,7 +19,9 @@ struct ClipboardWarningsView: View {
                         systemImage: "keyboard.badge.exclamationmark",
                         isCompact: isCompact,
                         actionTitle: L10n.string("重试"),
-                        action: onRetryHotKey
+                        action: onRetryHotKey,
+                        showsShortcutSettings: true,
+                        beforeOpeningSettings: beforeOpeningSettings
                     )
                 }
 
@@ -64,6 +68,8 @@ private struct WarningBanner: View {
     let isCompact: Bool
     var actionTitle: String?
     var action: (() -> Void)?
+    var showsShortcutSettings = false
+    var beforeOpeningSettings: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -81,6 +87,14 @@ private struct WarningBanner: View {
                 Button(actionTitle, action: action)
                     .controlSize(.small)
                     .accessibilityHint(L10n.string("再次尝试启用全局快捷键"))
+            }
+            if showsShortcutSettings {
+                AppSettingsButton(
+                    title: L10n.string("更换快捷键…"),
+                    systemImage: nil,
+                    beforeOpen: beforeOpeningSettings
+                )
+                .controlSize(.small)
             }
         }
         .padding(.horizontal, isCompact ? 8 : 10)

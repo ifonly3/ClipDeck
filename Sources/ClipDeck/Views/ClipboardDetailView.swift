@@ -120,7 +120,7 @@ struct ClipboardDetailView: View {
             Image(systemName: "keyboard")
                 .accessibilityHidden(true)
             Text(
-                L10n.string("单击选择 · ↑↓ 切换 · Return 复制 · Delete 删除 · Esc 关闭")
+                L10n.string("单击选择 · 双击复制 · ↑↓ 切换 · Return 复制 · Delete 删除 · Esc 关闭")
             )
         }
         .font(.caption)
@@ -130,7 +130,7 @@ struct ClipboardDetailView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             L10n.string(
-                "操作：单击选择，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口"
+                "操作：单击选择，双击复制，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口"
             )
         )
     }

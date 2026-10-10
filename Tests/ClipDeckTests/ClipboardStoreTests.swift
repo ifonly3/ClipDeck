@@ -96,7 +96,7 @@ func historyTrimsPromotesExternalDuplicatesAndDoesNotReorderManualCopies() throw
     let restoredIndex = try #require(store.index(of: restoredItem))
     store.delete(restoredItem)
     #expect(!store.items.contains { $0.id == restoredItem.id })
-    store.restore(restoredItem, at: restoredIndex)
+    store.restore(restoredItem)
     #expect(store.items[restoredIndex].id == restoredItem.id)
     #expect(store.items[restoredIndex].capturedAt == restoredItem.capturedAt)
 }
@@ -230,8 +230,8 @@ func imageHistoryByteBudgetKeepsTheNewestImageThatFits() throws {
     let olderItem = ClipboardItem(image: olderImage, copiedAt: Date(timeIntervalSince1970: 1))
     let newerItem = ClipboardItem(image: newerImage, copiedAt: Date(timeIntervalSince1970: 2))
 
-    store.restore(olderItem, at: 0)
-    store.restore(newerItem, at: 0)
+    store.restore(olderItem)
+    store.restore(newerItem)
 
     #expect(store.items.map(\.id) == [newerItem.id])
 }
@@ -248,7 +248,7 @@ func deletingAnItemSupportsUndoAndRedo() throws {
         monitoringDefaultsKey: "monitoring"
     )
     let item = ClipboardItem(text: "可撤销")
-    store.restore(item, at: 0)
+    store.restore(item)
     let undoManager = UndoManager()
     undoManager.groupsByEvent = false
 

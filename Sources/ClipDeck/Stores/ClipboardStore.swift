@@ -1,8 +1,6 @@
 import AppKit
 import Combine
 import Foundation
-import ImageIO
-import UniformTypeIdentifiers
 
 @MainActor
 private final class ClipboardUndoAction: NSObject {
@@ -13,25 +11,42 @@ private final class ClipboardUndoAction: NSObject {
 
     let operation: Operation
     let item: ClipboardItem
-    let index: Int
     weak var undoManager: UndoManager?
     weak var store: ClipboardStore?
 
     init(
         operation: Operation,
         item: ClipboardItem,
-        index: Int,
         undoManager: UndoManager,
         store: ClipboardStore
     ) {
         self.operation = operation
         self.item = item
-        self.index = index
         self.undoManager = undoManager
         self.store = store
     }
 
     @objc func applyHistoryUndo(_ sender: Any?) { store?.performHistoryUndo(self) }
+}
+
+/// Where a capture warning belongs. Event-wide problems sort before per-item
+/// notes, so the most important message is the one shown first.
+private enum CaptureWarningSlot: Hashable, Comparable {
+    case memoryBudget
+    case readFailure
+    case fileCountLimit
+    case item(Int)
+
+    private var order: Int {
+        switch self {
+        case .memoryBudget: return -3
+        case .readFailure: return -2
+        case .fileCountLimit: return -1
+        case .item(let index): return index
+        }
+    }
+
+    static func < (lhs: Self, rhs: Self) -> Bool { lhs.order < rhs.order }
 }
 
 @MainActor
@@ -43,7 +58,7 @@ private final class ClipboardCaptureEvent {
     let sequence: Int
     var parts: [Int: ClipboardItem.Content] = [:]
     var originals: [Int: ClipboardRepresentationItem] = [:]
-    var warnings: [Int: String] = [:]
+    var warnings: [CaptureWarningSlot: String] = [:]
     var imageSignatures: [Int: Data] = [:]
     var pendingImageIndexes = Set<Int>()
     var isFilesOnly = false
@@ -54,19 +69,11 @@ private final class ClipboardCaptureEvent {
         self.epoch = epoch
         self.sequence = sequence
     }
-}
 
-private let legacyFilenamesPasteboardType = NSPasteboard.PasteboardType(
-    "NSFilenamesPboardType"
-)
-private let restoreTokenPasteboardType = NSPasteboard.PasteboardType(
-    "com.qiaoni.clipdeck.restore-token"
-)
-
-private struct PasteboardRecoverySnapshot {
-    let items: [NSPasteboardItem]
-    let isComplete: Bool
-    let sourceChangeCount: Int
+    /// Every warning, most important first.
+    var orderedWarnings: [String] {
+        warnings.sorted { $0.key < $1.key }.map(\.value)
+    }
 }
 
 private enum ClipboardReadFailureKind {
@@ -184,6 +191,9 @@ final class ClipboardStore: NSObject, ObservableObject {
     @Published private(set) var lastCopiedItemID: ClipboardItem.ID?
     private(set) var lastDeletionCanBeUndone = false
 
+    /// The privacy policy consulted before each clipboard read.
+    let privacySettings: CapturePrivacySettings
+
     private static let defaultMonitoringKey = "com.qiaoni.ClipDeck.isMonitoring"
 
     private let pasteboard: NSPasteboard
@@ -191,6 +201,7 @@ final class ClipboardStore: NSObject, ObservableObject {
     private let monitoringDefaultsKey: String
     private let imageProcessor: any ImageProcessing
     private let configuration: Configuration
+    private let frontmostApplicationIdentifier: @MainActor () -> String?
 
     private var lastChangeCount: Int
     // The timer is created and mutated on MainActor; unsafe isolation only lets
@@ -215,13 +226,19 @@ final class ClipboardStore: NSObject, ObservableObject {
         userDefaults: UserDefaults = .standard,
         monitoringDefaultsKey: String = ClipboardStore.defaultMonitoringKey,
         imageProcessor: any ImageProcessing = ImageProcessor(),
-        configuration: Configuration = .default
+        configuration: Configuration = .default,
+        privacySettings: CapturePrivacySettings? = nil,
+        frontmostApplicationIdentifier: @escaping @MainActor () -> String? = {
+            NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        }
     ) {
         self.pasteboard = pasteboard
         self.userDefaults = userDefaults
         self.monitoringDefaultsKey = monitoringDefaultsKey
         self.imageProcessor = imageProcessor
         self.configuration = configuration
+        self.privacySettings = privacySettings ?? CapturePrivacySettings(defaults: userDefaults)
+        self.frontmostApplicationIdentifier = frontmostApplicationIdentifier
         self.lastChangeCount = pasteboard.changeCount
         self.isMonitoring = userDefaults.object(forKey: monitoringDefaultsKey) as? Bool ?? true
         self.accessStatus = nil
@@ -258,17 +275,9 @@ final class ClipboardStore: NSObject, ObservableObject {
         pollTimer = timer
     }
 
+    /// Whitespace-separated terms must all match, in any order.
     func filteredItems(matching query: String) -> [ClipboardItem] {
-        let normalizedQuery = ClipboardItem.normalizedSearchText(
-            query.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-        guard !normalizedQuery.isEmpty else {
-            return items
-        }
-
-        return items.filter {
-            $0.searchableText.contains(normalizedQuery)
-        }
+        ClipboardSearchQuery(query).filter(items)
     }
 
     @discardableResult
@@ -276,37 +285,16 @@ final class ClipboardStore: NSObject, ObservableObject {
         latestCaptureSequence += 1
         captureSequenceChangeCount = nil
 
-        let allFiles = item.parts.flatMap { part -> [ClipboardFileReference] in
-            if case .files(let files) = part { return files.references }
-            return []
-        }
-        if !plainTextOnly {
-            let unavailableFiles = allFiles.filter { !$0.isAvailable }
-            guard unavailableFiles.isEmpty else {
-                if unavailableFiles.count == 1, let file = unavailableFiles.first {
-                    setCaptureWarning(
-                        L10n.string(
-                            "“%@”不存在或暂不可用，未更改系统剪贴板。",
-                            file.displayName
-                        )
-                    )
-                } else {
-                    setCaptureWarning(
-                        L10n.string(
-                            "%lld 个文件不存在或暂不可用，未更改系统剪贴板。",
-                            Int64(unavailableFiles.count)
-                        )
-                    )
-                }
-                return false
-            }
+        if !plainTextOnly, let warning = unavailableFilesWarning(for: item) {
+            setCaptureWarning(warning)
+            return false
         }
 
         // Monitoring never writes to the pasteboard. An explicit restore is the
         // only mutation, and its complete payload is prepared before replacing
         // the user's current clipboard contents.
         let restoreToken = UUID().uuidString
-        guard let pasteboardObjects = makePasteboardObjects(
+        guard let pasteboardObjects = ClipboardRestorePayload.make(
             for: item,
             restoreToken: restoreToken,
             plainTextOnly: plainTextOnly
@@ -314,7 +302,10 @@ final class ClipboardStore: NSObject, ObservableObject {
             setPreparationWarning(for: item)
             return false
         }
-        let recoverySnapshot = makePasteboardRecoverySnapshot()
+        let recoverySnapshot = PasteboardRecoverySnapshot.capture(
+            from: pasteboard,
+            maximumBytes: configuration.maximumPasteboardRecoveryBytes
+        )
         guard pasteboard.changeCount == recoverySnapshot.sourceChangeCount else {
             setCaptureWarning(
                 L10n.string("系统剪贴板刚刚发生变化，未覆盖新内容；请重试。")
@@ -390,11 +381,7 @@ final class ClipboardStore: NSObject, ObservableObject {
 
         delete(item)
         if let undoManager {
-            registerRestoreUndo(
-                for: item,
-                at: index,
-                undoManager: undoManager
-            )
+            registerHistoryUndo(operation: .restore, item: item, undoManager: undoManager)
             lastDeletionCanBeUndone = undoActions.contains {
                 $0.item.id == item.id && $0.undoManager === undoManager
             }
@@ -402,49 +389,38 @@ final class ClipboardStore: NSObject, ObservableObject {
         return index
     }
 
-    func restore(_ item: ClipboardItem, at index: Int) {
+    /// Puts an item back by capture time, so newer items that arrived after it
+    /// was deleted stay above it. A newer copy of the same content wins.
+    func restore(_ item: ClipboardItem) {
         for event in captureEvents.values where event.id == item.id { event.isDeleted = false }
         var updatedItems = items
+        if updatedItems.contains(where: {
+            $0.id != item.id && $0.hasSameContent(as: item) && !Self.isOrderedBefore(item, $0)
+        }) {
+            return
+        }
         updatedItems.removeAll { $0.id == item.id || $0.hasSameContent(as: item) }
-        let safeIndex = min(max(0, index), updatedItems.count)
-        updatedItems.insert(item, at: safeIndex)
+        let position = updatedItems.firstIndex { Self.isOrderedBefore(item, $0) } ?? updatedItems.endIndex
+        updatedItems.insert(item, at: position)
         items = trimmedHistory(from: updatedItems)
     }
 
-    private func registerRestoreUndo(
-        for item: ClipboardItem,
-        at index: Int,
-        undoManager: UndoManager
-    ) {
-        registerHistoryUndo(
-            operation: .restore,
-            item: item,
-            at: index,
-            undoManager: undoManager
-        )
-    }
-
-    private func registerDeleteRedo(
-        for item: ClipboardItem,
-        at index: Int,
-        undoManager: UndoManager
-    ) {
-        registerHistoryUndo(
-            operation: .delete,
-            item: item,
-            at: index,
-            undoManager: undoManager
-        )
+    /// Newest first; equal timestamps fall back to a stable identifier order.
+    private static func isOrderedBefore(_ lhs: ClipboardItem, _ rhs: ClipboardItem) -> Bool {
+        lhs.capturedAt == rhs.capturedAt
+            ? lhs.id.uuidString < rhs.id.uuidString
+            : lhs.capturedAt > rhs.capturedAt
     }
 
     private func registerHistoryUndo(
         operation: ClipboardUndoAction.Operation,
         item: ClipboardItem,
-        at index: Int,
         undoManager: UndoManager
     ) {
+        // Compatibility rasters are rebuilt on demand, so undo keeps originals only.
+        let retainedItem = item.hasRebuildableData ? item.droppingRebuildableData() : item
         guard configuration.maximumUndoItemCount > 0,
-              item.storageByteCount <= configuration.maximumUndoBytes else {
+              retainedItem.storageByteCount <= configuration.maximumUndoBytes else {
             setCaptureWarning(L10n.string("此条目已删除，因内容过大无法撤销。"))
             return
         }
@@ -455,8 +431,7 @@ final class ClipboardStore: NSObject, ObservableObject {
 
         let action = ClipboardUndoAction(
             operation: operation,
-            item: item,
-            index: index,
+            item: retainedItem,
             undoManager: undoManager,
             store: self
         )
@@ -483,19 +458,11 @@ final class ClipboardStore: NSObject, ObservableObject {
 
         switch action.operation {
         case .restore:
-            restore(action.item, at: action.index)
-            registerDeleteRedo(
-                for: action.item,
-                at: action.index,
-                undoManager: undoManager
-            )
+            restore(action.item)
+            registerHistoryUndo(operation: .delete, item: action.item, undoManager: undoManager)
         case .delete:
             delete(action.item)
-            registerRestoreUndo(
-                for: action.item,
-                at: action.index,
-                undoManager: undoManager
-            )
+            registerHistoryUndo(operation: .restore, item: action.item, undoManager: undoManager)
         }
     }
 
@@ -567,12 +534,18 @@ final class ClipboardStore: NSObject, ObservableObject {
     }
 
     private func snapshotLimits() -> PasteboardSnapshotReader.Limits {
-        .init(
+        var privacy = privacySettings.rules
+        if !privacy.ignoredBundleIdentifiers.isEmpty {
+            privacy.frontmostBundleIdentifier = frontmostApplicationIdentifier()
+        }
+        return .init(
             maximumBytes: configuration.maximumImageSnapshotBytes,
             maximumItems: configuration.maximumFileReferenceCount,
             maximumImageCandidates: configuration.maximumSnapshotCandidateCount,
             maximumImageBytes: max(0, min(configuration.maximumImageSnapshotBytes,
-                configuration.maximumPendingImageCaptureBytes - pendingImageCaptureBytes))
+                configuration.maximumPendingImageCaptureBytes - pendingImageCaptureBytes)),
+            maximumTextBytes: configuration.maximumTextBytes,
+            privacy: privacy
         )
     }
 
@@ -584,6 +557,14 @@ final class ClipboardStore: NSObject, ObservableObject {
         case .unavailable:
             handlePasteboardMetadataReadFailure(changeCount: requestedChangeCount)
             refreshAccessStatus()
+            return
+        case .skipped:
+            // Intentionally not recorded. Nothing was read, nothing to retry,
+            // and no warning: the source asked for discretion.
+            captureEvents[requestedChangeCount]?.isDeleted = true
+            captureEvents[requestedChangeCount] = nil
+            lastChangeCount = max(lastChangeCount, requestedChangeCount)
+            resetReadRetryState()
             return
         case .success(let snapshot):
             consume(snapshot)
@@ -634,7 +615,7 @@ final class ClipboardStore: NSObject, ObservableObject {
         if failures.isEmpty {
             let count = parsedFiles.reduce(0) { $0 + $1.1.count }
             if count > configuration.maximumFileReferenceCount {
-                event.warnings[-1] = L10n.string(
+                event.warnings[.fileCountLimit] = L10n.string(
                     "一次复制的文件超过 %lld 个，本次未记录。",
                     Int64(configuration.maximumFileReferenceCount)
                 )
@@ -645,7 +626,7 @@ final class ClipboardStore: NSObject, ObservableObject {
                     // Public file URLs replay native Finder copy semantics. File
                     // contents and auxiliary file thumbnails are never read.
                     event.originals[index] = nil
-                    event.warnings[index] = nil
+                    event.warnings[.item(index)] = nil
                 }
             }
         } else {
@@ -657,6 +638,7 @@ final class ClipboardStore: NSObject, ObservableObject {
         }
 
         for source in snapshot.items where !source.hasFiles {
+            let slot = CaptureWarningSlot.item(source.index)
             let imageTypes = source.types.filter(PasteboardSnapshotReader.isImageType)
             let candidates = PasteboardSnapshotReader.imageTypes(
                 source.types, maximumCandidates: configuration.maximumSnapshotCandidateCount
@@ -682,44 +664,44 @@ final class ClipboardStore: NSObject, ObservableObject {
                     failures.append(.image)
                     if let text {
                         resolveText(text, source: source, event: event)
-                        event.warnings[source.index] = L10n.string("图片暂不可读取，已保留可读取的文字。")
+                        event.warnings[slot] = L10n.string("图片暂不可读取，已保留可读取的文字。")
                     }
                 } else {
-                    event.warnings[source.index] = snapshotSizeWarning(snapshot)
+                    event.warnings[slot] = snapshotSizeWarning(snapshot)
                     if let text { resolveText(text, source: source, event: event) }
                 }
             } else if let text {
                 resolveText(text, source: source, event: event)
                 if !source.oversizedTypes.isEmpty || !source.unreadableTypes.isEmpty {
-                    event.warnings[source.index] = L10n.string("部分格式无法读取或超过限制，已保留可读取的内容。")
+                    event.warnings[slot] = L10n.string("部分格式无法读取或超过限制，已保留可读取的内容。")
                 } else {
-                    event.warnings[source.index] = nil
+                    event.warnings[slot] = nil
                 }
             } else if oversizedText {
-                event.warnings[source.index] = textSizeWarning()
+                event.warnings[slot] = textSizeWarning()
             } else if !source.unreadableTypes.isEmpty {
                 failures.append(.text)
             } else if !source.oversizedTypes.isEmpty {
-                event.warnings[source.index] = L10n.string("剪贴板内容超过容量限制，本次未完整记录。")
+                event.warnings[slot] = L10n.string("剪贴板内容超过容量限制，本次未完整记录。")
             } else if !source.types.isEmpty {
-                event.warnings[source.index] = L10n.string("此类剪贴板内容暂不支持，系统剪贴板中的原内容仍可正常粘贴。")
+                event.warnings[slot] = L10n.string("此类剪贴板内容暂不支持，系统剪贴板中的原内容仍可正常粘贴。")
             }
         }
 
         if let failure = failures.first {
             if registerReadFailureAndShouldRetry(changeCount: changeCount) {
-                event.warnings[-2] = failure.retryMessage
+                event.warnings[.readFailure] = failure.retryMessage
             } else {
                 lastChangeCount = max(lastChangeCount, changeCount)
-                event.warnings[-2] = failure.finalMessage
+                event.warnings[.readFailure] = failure.finalMessage
             }
-            if event.sequence == latestCaptureSequence { setCaptureWarning(event.warnings[-2]) }
+            if event.sequence == latestCaptureSequence { setCaptureWarning(event.warnings[.readFailure]) }
         } else {
             lastChangeCount = max(lastChangeCount, changeCount)
             resetReadRetryState()
-            event.warnings[-2] = nil
+            event.warnings[.readFailure] = nil
             if event.sequence == latestCaptureSequence {
-                setCaptureWarning(event.warnings.sorted { $0.key < $1.key }.first?.value)
+                setCaptureWarning(event.orderedWarnings.first)
             }
         }
         publish(event)
@@ -732,11 +714,48 @@ final class ClipboardStore: NSObject, ObservableObject {
         return text
     }
 
+    /// Keeps the source's text formats in their original order. Plain-text
+    /// targets need a text flavor, so one is derived only when the source had
+    /// none (for example HTML- or RTF-only content) and the text is not empty.
     private func resolveText(_ text: String, source: PasteboardItemSnapshot, event: ClipboardCaptureEvent) {
         event.parts[source.index] = .text(text)
-        var formats = source.representations.filter { !PasteboardSnapshotReader.isImageType($0.key) }
-        formats[PasteboardSnapshotReader.plainText] = Data(text.utf8)
-        event.originals[source.index] = .init(representations: formats)
+        var entries = source.types.compactMap { type -> ClipboardRepresentationItem.Entry? in
+            guard !PasteboardSnapshotReader.isImageType(type),
+                  let data = source.representations[type] else { return nil }
+            return .init(type: type, data: data)
+        }
+        if !entries.contains(where: { $0.type == PasteboardSnapshotReader.plainText }), !text.isEmpty {
+            entries.append(.init(type: PasteboardSnapshotReader.plainText, data: Data(text.utf8)))
+        }
+        event.originals[source.index] = .init(entries: entries)
+    }
+
+    /// The decoded image takes the place of the writer's first image type and
+    /// is followed by ClipDeck's compatibility rasters; other formats keep their
+    /// positions. No plain text is added: an image copied with only HTML or a
+    /// URL must keep pasting as an image in apps that prefer text.
+    private static func imageOriginal(
+        for image: ClipboardImage,
+        source: PasteboardItemSnapshot
+    ) -> ClipboardRepresentationItem {
+        let imageEntries = [ClipboardRepresentationItem.Entry(type: image.pasteboardType.rawValue, data: image.data)]
+            + image.derivedRepresentations.map {
+                ClipboardRepresentationItem.Entry(type: $0.type.rawValue, data: $0.data, isRebuildable: true)
+            }
+        var entries: [ClipboardRepresentationItem.Entry] = []
+        var insertedImage = false
+        for type in source.types {
+            if PasteboardSnapshotReader.isImageType(type) {
+                if !insertedImage {
+                    entries += imageEntries
+                    insertedImage = true
+                }
+            } else if let data = source.representations[type] {
+                entries.append(.init(type: type, data: data))
+            }
+        }
+        if !insertedImage { entries.insert(contentsOf: imageEntries, at: 0) }
+        return .init(entries: entries)
     }
 
     private func scheduleImage(
@@ -745,14 +764,15 @@ final class ClipboardStore: NSObject, ObservableObject {
         text: String?,
         event: ClipboardCaptureEvent
     ) {
+        let slot = CaptureWarningSlot.item(source.index)
         guard !event.pendingImageIndexes.contains(source.index) else { return }
         guard captureTasks.count < configuration.maximumPendingImageCaptures else {
-            event.warnings[source.index] = L10n.string("图片处理队列已满，本次未记录。")
+            event.warnings[slot] = L10n.string("图片处理队列已满，本次未记录。")
             return
         }
         let byteCount = source.byteCount
         guard byteCount <= configuration.maximumPendingImageCaptureBytes - pendingImageCaptureBytes else {
-            event.warnings[source.index] = L10n.string("图片处理队列内存已满，本次未记录。")
+            event.warnings[slot] = L10n.string("图片处理队列内存已满，本次未记录。")
             return
         }
         event.imageSignatures[source.index] = source.imageSignature
@@ -783,18 +803,13 @@ final class ClipboardStore: NSObject, ObservableObject {
                         continue
                     }
                     event.parts[source.index] = .image(image)
-                    var formats = source.representations.filter {
-                        !PasteboardSnapshotReader.isImageType($0.key)
-                    }
-                    for (type, data) in image.representations { formats[type.rawValue] = data }
-                    if let text { formats[PasteboardSnapshotReader.plainText] = Data(text.utf8) }
-                    event.originals[source.index] = .init(representations: formats)
-                    event.warnings[source.index] = nil
+                    event.originals[source.index] = Self.imageOriginal(for: image, source: source)
+                    event.warnings[slot] = nil
                     event.pendingImageIndexes.remove(source.index)
                     self.publish(event)
                     // A successful sibling must not erase an earlier warning.
                     if event.sequence == self.latestCaptureSequence,
-                       let warning = event.warnings.sorted(by: { $0.key < $1.key }).first?.value {
+                       let warning = event.orderedWarnings.first {
                         self.setCaptureWarning(warning)
                     }
                     return
@@ -804,9 +819,9 @@ final class ClipboardStore: NSObject, ObservableObject {
             }
             if let text {
                 self.resolveText(text, source: source, event: event)
-                event.warnings[source.index] = L10n.string("图片无法解析，已保留可读取的文字和文字格式。")
+                event.warnings[slot] = L10n.string("图片无法解析，已保留可读取的文字和文字格式。")
             } else {
-                event.warnings[source.index] = self.warningMessage(for: failure)
+                event.warnings[slot] = self.warningMessage(for: failure)
             }
             if source.unreadableTypes.contains(where: PasteboardSnapshotReader.isImageType),
                self.pasteboard.changeCount == event.changeCount {
@@ -817,7 +832,7 @@ final class ClipboardStore: NSObject, ObservableObject {
             event.pendingImageIndexes.remove(source.index)
             self.publish(event)
             if event.sequence == self.latestCaptureSequence {
-                self.setCaptureWarning(event.warnings[source.index])
+                self.setCaptureWarning(event.warnings[slot])
             }
         }
     }
@@ -835,7 +850,10 @@ final class ClipboardStore: NSObject, ObservableObject {
                 originals.append(original)
             } else if case .files(let files) = part {
                 originals += files.urls.map { url in
-                    .init(representations: [NSPasteboard.PasteboardType.fileURL.rawValue: Data(url.absoluteString.utf8)])
+                    .init(entries: [.init(
+                        type: NSPasteboard.PasteboardType.fileURL.rawValue,
+                        data: Data(url.absoluteString.utf8)
+                    )])
                 }
             }
         }
@@ -845,7 +863,7 @@ final class ClipboardStore: NSObject, ObservableObject {
             }
             if let files = ClipboardFileList(urls: urls) { parts = [.files(files)] }
         }
-        let warning = event.warnings.sorted { $0.key < $1.key }.map(\.value).joined(separator: "\n")
+        let warning = event.orderedWarnings.joined(separator: "\n")
         let item = ClipboardItem(
             id: event.id, parts: parts, originalItems: originals,
             captureNote: warning.isEmpty ? nil : warning, copiedAt: event.capturedAt
@@ -853,24 +871,34 @@ final class ClipboardStore: NSObject, ObservableObject {
         if let id = insert(item) { event.id = id }
     }
 
+    /// Bounds one clipboard event before it reaches history. Images first try to
+    /// fit without their rebuildable compatibility rasters; a part that still
+    /// does not fit is left out with a visible note.
     private func enforceEventBudget(_ event: ClipboardCaptureEvent) {
         var retainedBytes = 0
         var rejected = Set<Int>()
         var fileIndexes = Set<Int>()
         for (index, part) in event.parts.sorted(by: { $0.key < $1.key }) {
+            let remaining = configuration.maximumImageHistoryBytes - retainedBytes
             let original = event.originals[index]
-            let bytes: Int
-            switch part {
-            case .text(let text): bytes = (original?.byteCount ?? 0) + text.utf8.count
-            case .image(let image):
-                bytes = original.map { $0.byteCount + image.renderingByteCount } ?? image.storageByteCount
-            case .files(let files):
-                fileIndexes.insert(index)
-                bytes = files.urls.reduce(0) { $0 + 2 * $1.absoluteString.utf8.count }
+            var bytes = Self.eventByteCount(part: part, original: original)
+            if case .files = part { fileIndexes.insert(index) }
+            if bytes > remaining, case .image(let image) = part,
+               !image.derivedRepresentations.isEmpty || original?.hasRebuildableData == true {
+                let compactImage = image.withoutDerivedRepresentations()
+                let compactOriginal = original?.droppingRebuildableData()
+                let compactBytes = Self.eventByteCount(part: .image(compactImage), original: compactOriginal)
+                if compactBytes <= remaining {
+                    event.parts[index] = .image(compactImage)
+                    event.originals[index] = compactOriginal
+                    bytes = compactBytes
+                }
             }
-            if bytes > configuration.maximumImageHistoryBytes - retainedBytes {
+            if bytes > remaining {
                 rejected.insert(index)
-            } else { retainedBytes += bytes }
+            } else {
+                retainedBytes += bytes
+            }
         }
         guard !rejected.isEmpty else { return }
         // File selections stay atomic even when mixed with a large image batch.
@@ -880,8 +908,22 @@ final class ClipboardStore: NSObject, ObservableObject {
             event.originals[index] = nil
         }
         let warning = L10n.string("部分内容超过历史内存上限，已保留可容纳的项目。")
-        event.warnings[-3] = warning
+        event.warnings[.memoryBudget] = warning
         if event.sequence == latestCaptureSequence { setCaptureWarning(warning) }
+    }
+
+    private static func eventByteCount(
+        part: ClipboardItem.Content,
+        original: ClipboardRepresentationItem?
+    ) -> Int {
+        switch part {
+        case .text(let text):
+            return (original?.byteCount ?? 0) + text.utf8.count
+        case .image(let image):
+            return original.map { $0.byteCount + image.renderingByteCount } ?? image.storageByteCount
+        case .files(let files):
+            return files.urls.reduce(0) { $0 + 2 * $1.absoluteString.utf8.count }
+        }
     }
 
     private func fileURLs(from source: PasteboardItemSnapshot) -> [URL]? {
@@ -973,10 +1015,7 @@ final class ClipboardStore: NSObject, ObservableObject {
             id: id, parts: incoming.parts, originalItems: incoming.originalItems,
             captureNote: incoming.captureNote, copiedAt: incoming.capturedAt
         ))
-        updated.sort {
-            $0.capturedAt == $1.capturedAt
-                ? $0.id.uuidString < $1.id.uuidString : $0.capturedAt > $1.capturedAt
-        }
+        updated.sort(by: Self.isOrderedBefore)
         items = trimmedHistory(from: updated)
         if !items.contains(where: { $0.id == id }) {
             setCaptureWarning(L10n.string("此条目超过历史内存上限，未记录。"))
@@ -985,89 +1024,44 @@ final class ClipboardStore: NSObject, ObservableObject {
         return id
     }
 
+    /// Keeps the newest items within the count and byte budgets. Before an
+    /// older image is evicted, its rebuildable compatibility rasters are
+    /// released instead, so far more images stay in history.
     private func trimmedHistory(from sourceItems: [ClipboardItem]) -> [ClipboardItem] {
         var retained: [ClipboardItem] = []
         var bytes = 0
         for item in sourceItems {
             guard retained.count < configuration.maximumItemCount else { break }
-            guard item.mediaStorageByteCount <= configuration.maximumImageHistoryBytes - bytes else { continue }
-            bytes += item.mediaStorageByteCount
-            retained.append(item)
+            let remaining = configuration.maximumImageHistoryBytes - bytes
+            var candidate = item
+            if candidate.storageByteCount > remaining, candidate.hasRebuildableData {
+                candidate = candidate.droppingRebuildableData()
+            }
+            guard candidate.storageByteCount <= remaining else { continue }
+            bytes += candidate.storageByteCount
+            retained.append(candidate)
         }
         return retained
     }
 
-    private func makePasteboardObjects(
-        for item: ClipboardItem,
-        restoreToken: String,
-        plainTextOnly: Bool = false
-    ) -> [NSPasteboardWriting]? {
-        if plainTextOnly {
-            guard let text = item.plainText else { return nil }
-            return makePasteboardObjects(for: ClipboardItem(text: text), restoreToken: restoreToken)
+    /// Checks referenced files without letting an unresponsive volume freeze the UI.
+    private func unavailableFilesWarning(for item: ClipboardItem) -> String? {
+        let files = item.parts.flatMap { part -> [ClipboardFileReference] in
+            if case .files(let list) = part { return list.references }
+            return []
         }
-        if !item.originalItems.isEmpty {
-            var result: [NSPasteboardWriting] = []
-            for (index, original) in item.originalItems.enumerated() {
-                let value = NSPasteboardItem()
-                for (type, data) in original.representations {
-                    guard value.setData(data, forType: .init(type)) else { return nil }
-                }
-                if index == 0 {
-                    guard value.setString(restoreToken, forType: restoreTokenPasteboardType) else { return nil }
-                }
-                result.append(value)
-            }
-            return result
+        let result = FileAvailability.check(files.map(\.url))
+        guard !result.unavailableIndexes.isEmpty else { return nil }
+        if result.timedOut {
+            return L10n.string("文件所在位置暂时没有响应，未更改系统剪贴板。")
         }
-        if item.parts.count > 1 {
-            var result: [NSPasteboardWriting] = []
-            for part in item.parts {
-                guard let values = makePasteboardObjects(for: ClipboardItem(content: part), restoreToken: restoreToken) else { return nil }
-                result += values
-            }
-            return result
+        if result.unavailableIndexes.count == 1, let index = result.unavailableIndexes.first {
+            return L10n.string("“%@”不存在或暂不可用，未更改系统剪贴板。", files[index].displayName)
         }
-        switch item.content {
-        case .text(let text):
-            let pasteboardItem = NSPasteboardItem()
-            guard pasteboardItem.setString(text, forType: .string) else {
-                return nil
-            }
-            guard pasteboardItem.setString(
-                restoreToken,
-                forType: restoreTokenPasteboardType
-            ) else {
-                return nil
-            }
-            return [pasteboardItem]
-        case .image(let image):
-            guard let pasteboardItem = makePasteboardItem(
-                for: image,
-                restoreToken: restoreToken
-            ) else {
-                return nil
-            }
-            return [pasteboardItem]
-        case .files(let files):
-            var pasteboardItems: [NSPasteboardWriting] = []
-            pasteboardItems.reserveCapacity(files.urls.count)
-            for (index, url) in files.urls.enumerated() {
-                let pasteboardItem = NSPasteboardItem()
-                guard pasteboardItem.setString(url.absoluteString, forType: .fileURL) else {
-                    return nil
-                }
-                if index == 0,
-                   !pasteboardItem.setString(
-                       restoreToken,
-                       forType: restoreTokenPasteboardType
-                   ) {
-                    return nil
-                }
-                pasteboardItems.append(pasteboardItem)
-            }
-            return pasteboardItems
-        }
+        return L10n.string(
+            "%lld 个文件不存在或暂不可用，未更改系统剪贴板。",
+            Int64(result.unavailableIndexes.count)
+        )
     }
 
     private func pasteboardContainsRestoreToken(_ restoreToken: String) -> Bool {
@@ -1089,126 +1083,6 @@ final class ClipboardStore: NSObject, ObservableObject {
                 L10n.string("无法准备剪贴板内容，当前系统剪贴板未更改。")
             )
         }
-    }
-
-    private func makePasteboardRecoverySnapshot() -> PasteboardRecoverySnapshot {
-        let sourceChangeCount = pasteboard.changeCount
-        guard let currentItems = pasteboard.pasteboardItems else {
-            return PasteboardRecoverySnapshot(
-                items: [],
-                isComplete: pasteboard.types?.isEmpty ?? true,
-                sourceChangeCount: sourceChangeCount
-            )
-        }
-
-        var remainingBytes = configuration.maximumPasteboardRecoveryBytes
-        var recoveryItems: [NSPasteboardItem] = []
-        var isComplete = true
-        recoveryItems.reserveCapacity(currentItems.count)
-
-        for currentItem in currentItems {
-            let recoveryItem = NSPasteboardItem()
-            let currentTypes = currentItem.types
-            let recoverableTypes = currentTypes
-                .filter { type in
-                    let isRecoverable = isRecoverablePasteboardType(type)
-                    if !isRecoverable {
-                        isComplete = false
-                    }
-                    return isRecoverable
-                }
-                .sorted { recoveryTypePriority($0) < recoveryTypePriority($1) }
-
-            for type in recoverableTypes {
-                guard let data = currentItem.data(forType: type),
-                      data.count <= remainingBytes,
-                      recoveryItem.setData(data, forType: type) else {
-                    isComplete = false
-                    continue
-                }
-                remainingBytes -= data.count
-            }
-
-            if recoveryItem.types.contains(where: isUserRecoverablePasteboardType) {
-                recoveryItems.append(recoveryItem)
-            }
-            if remainingBytes == 0 {
-                if recoveryItems.count < currentItems.count {
-                    isComplete = false
-                }
-                break
-            }
-        }
-
-        return PasteboardRecoverySnapshot(
-            items: recoveryItems,
-            isComplete: isComplete,
-            sourceChangeCount: sourceChangeCount
-        )
-    }
-
-    private func isRecoverablePasteboardType(
-        _ type: NSPasteboard.PasteboardType
-    ) -> Bool {
-        if type == .string
-            || type == .fileURL
-            || type == legacyFilenamesPasteboardType
-            || type == restoreTokenPasteboardType {
-            return true
-        }
-        // Reading an image representation just to prepare a rare failure
-        // rollback can synchronously materialize hundreds of megabytes from a
-        // lazy provider. Keep recovery lightweight; incomplete snapshots are
-        // reported honestly if the actual write ever fails.
-        return false
-    }
-
-    private func isUserRecoverablePasteboardType(
-        _ type: NSPasteboard.PasteboardType
-    ) -> Bool {
-        type == .string
-            || type == .fileURL
-            || type == legacyFilenamesPasteboardType
-    }
-
-    private func recoveryTypePriority(_ type: NSPasteboard.PasteboardType) -> Int {
-        if type == .string {
-            return 0
-        }
-        if type == .fileURL || type == legacyFilenamesPasteboardType {
-            return 1
-        }
-        if type == restoreTokenPasteboardType {
-            return 2
-        }
-        return 3
-    }
-
-    private func makePasteboardItem(
-        for image: ClipboardImage,
-        restoreToken: String
-    ) -> NSPasteboardItem? {
-        let item = NSPasteboardItem()
-        guard item.setData(image.data, forType: image.pasteboardType) else {
-            return nil
-        }
-
-        for (type, data) in image.representations where type != image.pasteboardType {
-            guard item.setData(data, forType: type) else {
-                return nil
-            }
-        }
-
-        if let textRepresentation = image.textRepresentation,
-           !item.setString(textRepresentation, forType: .string) {
-            return nil
-        }
-
-        guard item.setString(restoreToken, forType: restoreTokenPasteboardType) else {
-            return nil
-        }
-
-        return item
     }
 
     private func warningMessage(for failure: ImageProcessingFailure) -> String {

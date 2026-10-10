@@ -50,14 +50,15 @@ func localizedFormatsCoverCountsErrorsAndAccessibilityText() {
     )
     #expect(
         L10n.string(
-            "无法启用全局快捷键（错误码 %d）。请检查快捷键冲突后重试。",
+            "无法启用全局快捷键 %@（错误码 %d）。它可能已被其他应用占用，请在设置中更换。",
             localeIdentifier: "en",
+            "⌃⌥V",
             Int32(-987)
         ).contains("error -987")
     )
     #expect(
         L10n.string(
-            "操作：单击选择，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口",
+            "操作：单击选择，双击复制，上下方向键切换，回车复制，删除键删除，Escape 关闭窗口",
             localeIdentifier: "en"
         ).hasPrefix("Actions:")
     )
@@ -113,11 +114,10 @@ func everyLocalizedFormatPreservesTheSourcePlaceholderSignature() throws {
 }
 
 private func localizedTable(named localization: String) throws -> [String: String] {
-    let resourceLocalization = localization == "zh-Hans" ? "zh-hans" : localization
-    let localizationPath = try #require(
-        Bundle.module.path(forResource: resourceLocalization, ofType: "lproj")
+    let localizationBundle = try #require(
+        L10n.localizationBundle(named: localization, in: .module)
     )
-    let tableURL = URL(fileURLWithPath: localizationPath)
+    let tableURL = localizationBundle.bundleURL
         .appendingPathComponent("Localizable.strings")
     let dictionary = try #require(
         NSDictionary(contentsOf: tableURL) as? [String: String]
